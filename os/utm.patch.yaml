@@ -1,0 +1,23 @@
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete
+---
+apiVersion: v1alpha1
+kind: UnattendedInstallConfig
+# The provisioning describes how the installation disk should be provisioned.
+provisioning:
+  # Matches disks to initialize as physical volumes.
+  diskSelector:
+    # in UTM (macos), the disk path is always /dev/vda, check `talosctl get disks --insecure --nodes $CONTROL_PLANE_IP --talosconfig $TALOSCONFIG`
+    match: disk.dev_path == "/dev/vda"
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: local-path-provisioner
+provisioning:
+  diskSelector:
+    match: disk.transport == 'nvme'
+  minSize: 1GB
+  maxSize: 200GB
