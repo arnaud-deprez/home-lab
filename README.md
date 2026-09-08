@@ -29,7 +29,9 @@ I am all-in on k8s for all the goodies and to easily automate deployment pipelin
 [Production ready](https://docs.siderolabs.com/talos/v1.14/getting-started/prodnotes)
 
 > **NOTE**
+>
 > To add a Local Path provisioner, the VM must contain 2 disks: 1 for the system and 1 for the volume (nvme simulation if possible)
+> In production, we should always use external/persistent storage to the VM that persists once the VM dies or is replaced.
 
 Once the VM is started, there are a couple of env variables you need to set
 

@@ -14,3 +14,5 @@ pushd local-path-provisioner
 kustomize build | kubectl apply -f -
 popd
 ```
+
+And then run some [validations](https://github.com/rancher/local-path-provisioner?tab=readme-ov-file#usage) eventually.
