@@ -9,7 +9,18 @@ Stuff to install:
 - [ ] A Reverse Proxy
 - [ ] Nextcloud
 
-Ideally, the whole setup should be versioned as code.
+The whole setup is versioned as code and reconciled by [Flux](https://fluxcd.io/)
+(GitOps). See:
+
+- [`bootstrap/README.md`](bootstrap/README.md) — one-time cluster bootstrap
+- [`clusters/laptop/`](clusters/laptop/) — the laptop cluster entrypoint
+- [`infrastructure/`](infrastructure/) — controllers (CloudNativePG operator,
+  Traefik) and cluster config (local-path-provisioner)
+- [`docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md`](docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md)
+  and [`docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md`](docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md)
+
+Secrets are encrypted with SOPS + age (`.sops.yaml`); the age private key
+lives only in the cluster and a password manager.
 
 ## Setup
 

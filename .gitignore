@@ -1,5 +1,8 @@
 _out/
 os/context/
 *.iso
+*.agekey
+*.decrypted.yaml
 
 .serena
+.superpowers/

@@ -1,18 +1,27 @@
 # Day 1 operations
 
-Once the VM is bootstraped, there are a couple of things to perform before we can use it.
+Once the VM is bootstrapped, bring the cluster under Flux — see
+[`bootstrap/README.md`](../bootstrap/README.md). Everything below is then
+applied and reconciled automatically by Flux.
 
-## Setup a dynamic local path provisioner
+## Local path provisioner
 
-Check [Talos doc](https://docs.siderolabs.com/kubernetes-guides/csi/local-storage#local-storage)
+Now managed by Flux — see
+[`infrastructure/configs/base/local-path-provisioner/`](../infrastructure/configs/base/local-path-provisioner/).
+The Talos-specific bits (host path `/var/mnt/local-path-provisioner`,
+default StorageClass, `privileged` PodSecurity on the namespace) are
+kustomize patches over the vendored upstream `v0.0.31` manifests.
 
 > **NOTE**
-> To add a Local Path provisioner, the VM must contain 2 disks: 1 for the system and 1 for the volume (nvme simulation if possible)
+> The VM must contain 2 disks: 1 for the system and 1 for the volume
+> (nvme simulation if possible).
+
+To validate after reconciliation:
 
 ```sh
-pushd local-path-provisioner
-kustomize build | kubectl apply -f -
-popd
+kubectl get storageclass          # local-path is (default)
+kubectl -n local-path-storage get pods
 ```
 
-And then run some [validations](https://github.com/rancher/local-path-provisioner?tab=readme-ov-file#usage) eventually.
+See the upstream [usage / validation](https://github.com/rancher/local-path-provisioner?tab=readme-ov-file#usage)
+notes for a PVC + pod smoke test.

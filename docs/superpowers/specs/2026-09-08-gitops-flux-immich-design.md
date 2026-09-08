@@ -42,8 +42,8 @@ home-lab/
 │     └─ apps.yaml              # Flux Kustomization → apps/laptop (dependsOn: infrastructure)
 ├─ infrastructure/
 │  ├─ controllers/
-│  │  ├─ base/                  # cnpg-operator (catalog; more added later)
-│  │  └─ laptop/                # overlay: opts into cnpg-operator
+│  │  ├─ base/                  # cnpg-operator, traefik (catalog; more added later)
+│  │  └─ laptop/                # overlay: opts into cnpg-operator + traefik
 │  └─ configs/
 │     ├─ base/                  # local-path-provisioner (from day1/), other cluster config
 │     └─ laptop/                # overlay: opts into local-path-provisioner, sets it default SC
@@ -93,32 +93,40 @@ SOPS + age.
 
 ## Delivery phases
 
-### Phase 1 — Flux on the laptop, validated
+### Phase 1 — Bootstrap Flux, validate, add the infra layer
+
+Repo is already on GitHub (`origin =
+github.com/arnaud-deprez/home-lab`); `flux bootstrap` needs a
+fine-grained PAT (Contents + Administration RW) once, revocable
+afterwards.
 
 1. Pre-reqs: `flux` CLI, `kubeconfig` pointing at the Talos cluster,
    `flux check --pre`.
-2. Bootstrap Flux against the GitHub repo (`flux bootstrap github`),
-   targeting `clusters/laptop`. Needs a GitHub PAT (repo scope) once.
+2. `flux bootstrap github` targeting `clusters/laptop`. This installs the
+   controllers and doubles as the reconciliation check. A throwaway
+   podinfo `HelmRelease` afterwards confirms `helm-controller` + egress.
 3. Generate the age key, create the `sops-age` Secret, add `.sops.yaml`,
-   patch `kustomize-controller` for SOPS decryption.
+   patch the `flux-system` Kustomization for SOPS decryption.
 4. Migrate `day1/local-path-provisioner/` into
    `infrastructure/configs/base/local-path-provisioner/` (kustomization
    unchanged in substance). Add `infrastructure/configs/laptop` overlay
    that includes it. Add `infrastructure/controllers/{base,laptop}` with
-   the CNPG operator HelmRelease/OCIRepository.
-5. Add `clusters/laptop/infrastructure.yaml` and (empty-target for now or
-   deferred) `apps.yaml`.
-6. Validate: `flux get kustomizations` all Ready; local-path-provisioner
+   the CNPG operator (official cloudnative-pg Helm chart) and Traefik
+   (Helm chart) as the ingress controller.
+4. Add `clusters/laptop/infrastructure.yaml` and (deferred target)
+   `apps.yaml`.
+5. Validate: `flux get kustomizations` all Ready; local-path-provisioner
    pods running; `storageclass local-path` is default; a throwaway PVC
-   binds. Confirm reconciliation by editing a value in Git and watching
-   Flux apply it, and by reverting a manual `kubectl` change and watching
-   Flux restore it.
-7. Update `day1/README.md` / `bootstrap/README.md` to reflect the new
+   binds; Traefik and the CNPG operator running. Confirm reconciliation
+   by editing a value in Git and watching Flux apply it, and by reverting
+   a manual `kubectl` change and watching Flux restore it.
+6. Update `day1/README.md` / `bootstrap/README.md` to reflect the new
    flow; remove the superseded manual `kustomize build | kubectl apply`
    instructions for local-path-provisioner.
 
 Exit criteria: Flux reconciles the infrastructure layer from Git,
-local-path-provisioner runs under Flux, drift correction observed.
+local-path-provisioner + Traefik + CNPG operator run under Flux, drift
+correction observed.
 
 ### Phase 2 — Immich
 
@@ -148,15 +156,26 @@ local-path-provisioner runs under Flux, drift correction observed.
 Exit criteria: Immich reachable and persistent on the laptop, fully
 reconciled from Git.
 
+## Resolved decisions
+
+- Ingress: **Traefik**, installed as a Flux HelmRelease in Phase 1.
+  `ingress-nginx` is in maintenance-only wind-down; Traefik speaks both
+  Ingress and Gateway API so it is not a dead end.
+- Ingress exposure (laptop): Traefik runs as a **DaemonSet with
+  `hostPort` 80/443**; reachable at the VM IP. Works with UTM NAT or
+  bridged, survives laptop network changes, no extra components.
+  `base/traefik` stays exposure-agnostic; each cluster overlay sets its
+  own Service type. Future: `metallb` (on-prem overlay) / `hcloud-ccm`
+  (Hetzner overlay) as opt-in base components.
+- GitHub: repo already exists at `github.com/arnaud-deprez/home-lab`;
+  bootstrap uses a one-time PAT.
+- CNPG operator: installed via the official `cloudnative-pg` Helm chart
+  (actively maintained CNCF project).
+
 ## Open questions for the plan
 
-- Ingress: is there an ingress controller yet, or does Phase 1 also add
-  one (Traefik / ingress-nginx) to `infrastructure/controllers`? If none,
-  Phase 2 can start with a `NodePort` / `port-forward` and add ingress
-  later.
-- GitHub repo: bootstrap needs the repo to be on GitHub with a PAT.
-  Confirm the repo is pushed there.
-- CNPG chart vs. plain manifests for the operator install.
+- Immich ingress hostname for laptop access (e.g. `immich.local` via
+  `/etc/hosts`, or a real domain pointed at the VM).
 
 ## Non-goals
 
