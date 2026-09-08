@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: immich
+  labels:
+    # Immich images run as root / without the restricted hardening; baseline is
+    # the cluster default already — pin warn/audit to baseline too so kubectl
+    # stops emitting restricted-profile warnings on every rollout.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline

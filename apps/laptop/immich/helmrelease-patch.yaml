@@ -1,0 +1,19 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: immich
+  namespace: immich
+spec:
+  values:
+    server:
+      ingress:
+        main:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: immich.home.arpa
+              paths:
+                - path: "/"
+                  service:
+                    identifier: main
+          tls: []
