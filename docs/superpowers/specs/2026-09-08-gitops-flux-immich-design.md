@@ -85,11 +85,16 @@ SOPS + age.
   Secret (`sops-age` in `flux-system`) and backed up in the user's
   password manager. Never committed.
 - `.sops.yaml` at repo root with a creation rule matching
-  `.*secrets\.sops\.yaml` → encrypt with the age recipient.
-- Flux `kustomize-controller` configured with
-  `decryption.provider: sops` referencing the `sops-age` Secret.
+  `.*\.sops\.ya?ml` → encrypt `data`/`stringData` with the age recipient.
+- `spec.decryption` (provider `sops`, secret `sops-age`) is applied to
+  **every** Flux `Kustomization` in the cluster by a single patch in
+  `clusters/laptop/kustomization.yaml` (the explicit cluster entrypoint).
+  Decryption is a per-cluster concern; nothing under `apps/` or
+  `infrastructure/` carries it.
 - For local iteration before secrets are wired, a plain gitignored Secret
   manifest is acceptable.
+- No encrypted secret exists yet — CNPG generates the Immich DB
+  credentials; the SOPS path is wired but unused.
 
 ## Delivery phases
 

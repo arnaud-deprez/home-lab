@@ -4,9 +4,9 @@ This repo contains my home lab setup.
 
 Stuff to install:
 
-- [ ] Immich
+- [x] Immich — [`apps/base/immich/`](apps/base/immich/) (CloudNativePG + VectorChord, Valkey, Traefik ingress at `immich.home.arpa`)
 - [ ] Tailscale
-- [ ] A Reverse Proxy
+- [x] A Reverse Proxy — Traefik, [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/)
 - [ ] Nextcloud
 
 The whole setup is versioned as code and reconciled by [Flux](https://fluxcd.io/)
@@ -16,8 +16,14 @@ The whole setup is versioned as code and reconciled by [Flux](https://fluxcd.io/
 - [`clusters/laptop/`](clusters/laptop/) — the laptop cluster entrypoint
 - [`infrastructure/`](infrastructure/) — controllers (CloudNativePG operator,
   Traefik) and cluster config (local-path-provisioner)
-- [`docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md`](docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md)
-  and [`docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md`](docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md)
+- [`apps/`](apps/) — workloads (Immich)
+- [`docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md`](docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md),
+  [`docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md`](docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md),
+  [`docs/superpowers/plans/2026-09-08-immich-phase-2.md`](docs/superpowers/plans/2026-09-08-immich-phase-2.md)
+
+Immich is served at `http://immich.home.arpa/` — add
+`192.168.64.5  immich.home.arpa` to `/etc/hosts` on the client
+(node IP; Traefik runs a hostPort DaemonSet).
 
 Secrets are encrypted with SOPS + age (`.sops.yaml`); the age private key
 lives only in the cluster and a password manager.
