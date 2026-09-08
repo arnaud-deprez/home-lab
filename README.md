@@ -2,6 +2,15 @@
 
 This repo contains my home lab setup.
 
+Stuff to install:
+
+- [ ] Immich
+- [ ] Tailscale
+- [ ] A Reverse Proxy
+- [ ] Nextcloud
+
+Ideally, the whole setup should be versioned as code.
+
 ## Setup
 
 This is currently running on a single VM.

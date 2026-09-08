@@ -1,3 +1,5 @@
 _out/
 os/context/
 *.iso
+
+.serena
