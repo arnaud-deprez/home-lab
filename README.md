@@ -1,32 +1,53 @@
 # Home lab
 
-This repo contains my home lab setup.
+Home lab on a single-node [Talos](https://www.talos.dev/) cluster,
+GitOps-managed by [Flux](https://fluxcd.io/): Flux watches `main` and
+reconciles `clusters/laptop/` onto the cluster.
 
-Stuff to install:
+| Component | Status | Where |
+|---|---|---|
+| Immich | ✅ | [`apps/base/immich/`](apps/base/immich/) — CloudNativePG + VectorChord, Valkey, ingress `immich.home.arpa` |
+| Reverse proxy (Traefik) | ✅ | [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/) — hostPort DaemonSet |
+| Tailscale | ⬜ | |
+| Nextcloud | ⬜ | |
 
-- [x] Immich — [`apps/base/immich/`](apps/base/immich/) (CloudNativePG + VectorChord, Valkey, Traefik ingress at `immich.home.arpa`)
-- [ ] Tailscale
-- [x] A Reverse Proxy — Traefik, [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/)
-- [ ] Nextcloud
+- **Working with Flux** — branches, secrets, day-to-day ops: [`docs/flux.md`](docs/flux.md)
+- **Bootstrapping a cluster**: [`bootstrap/README.md`](bootstrap/README.md)
 
-The whole setup is versioned as code and reconciled by [Flux](https://fluxcd.io/)
-(GitOps). See:
+Immich is at `http://immich.home.arpa/` — add `192.168.64.5 immich.home.arpa`
+to `/etc/hosts` on the client (node IP; Traefik binds hostPort 80/443).
 
-- [`bootstrap/README.md`](bootstrap/README.md) — one-time cluster bootstrap
-- [`clusters/laptop/`](clusters/laptop/) — the laptop cluster entrypoint
-- [`infrastructure/`](infrastructure/) — controllers (CloudNativePG operator,
-  Traefik) and cluster config (local-path-provisioner)
-- [`apps/`](apps/) — workloads (Immich)
-- [`docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md`](docs/superpowers/specs/2026-09-08-gitops-flux-immich-design.md),
-  [`docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md`](docs/superpowers/plans/2026-09-08-gitops-flux-phase-1.md),
-  [`docs/superpowers/plans/2026-09-08-immich-phase-2.md`](docs/superpowers/plans/2026-09-08-immich-phase-2.md)
+## Repo layout
 
-Immich is served at `http://immich.home.arpa/` — add
-`192.168.64.5  immich.home.arpa` to `/etc/hosts` on the client
-(node IP; Traefik runs a hostPort DaemonSet).
+```
+clusters/laptop/   Flux entrypoint — Kustomizations, ordering, SOPS decryption patch
+infrastructure/
+  controllers/     operators & ingress (CloudNativePG, Traefik)   — reconciled first
+  configs/         cluster config (local-path-provisioner)
+apps/              workloads (Immich)
+```
 
-Secrets are encrypted with SOPS + age (`.sops.yaml`); the age private key
-lives only in the cluster and a password manager.
+Each of `infrastructure/*` and `apps/` has `base/` (reusable) + `laptop/`
+(per-cluster Kustomize overlay).
+
+## Design notes
+
+- **One Flux `HelmRelease` / Kustomization per component**, not an umbrella
+  chart. Ordering via `dependsOn`; stateful dependencies via operators
+  (CloudNativePG) rather than bundled subcharts.
+- **`controllers` → `configs` → `apps`** ordering — operators and CRDs must
+  exist before the resources that use them.
+- **`base/` + per-cluster overlay** so a future VPS / on-prem cluster reuses
+  `base/` and only overlays what differs (host, storage class, sizes,
+  ingress exposure).
+- **Traefik, not ingress-nginx** (the latter is in maintenance-only
+  wind-down). On the laptop it runs as a hostPort DaemonSet — works behind
+  UTM NAT with no LoadBalancer. A VPS/on-prem overlay would swap in MetalLB
+  or a cloud controller-manager.
+- **SOPS + age** for secrets. Decryption is patched onto every Kustomization
+  from `clusters/laptop/kustomization.yaml`; the age private key lives only
+  in the cluster (`sops-age` secret) and a password manager. No encrypted
+  secret exists yet — CNPG generates the Immich DB credentials.
 
 ## Setup
 
