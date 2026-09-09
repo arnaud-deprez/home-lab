@@ -41,9 +41,66 @@ flux get kustomizations                             # expect READY=True everywhe
 The change lands on its own within the reconcile interval; `flux reconcile`
 just makes it immediate.
 
+## Validate locally before pushing
+
+You don't need to commit to test. Iterate with these against your working
+tree, then push once — no temp commits.
+
+**1. Render an overlay** (catches Kustomize path/patch/merge errors, no cluster):
+
+```sh
+kubectl kustomize apps/laptop/immich
+```
+
+**2. Server-side dry-run** (schema, CRD and admission validation; needs the
+cluster, changes nothing):
+
+```sh
+kubectl apply --dry-run=server -k apps/laptop/immich
+```
+
+**3. `flux diff` — what would actually change.** Renders your **local
+files** the way the named Kustomization would, server-side dry-runs them,
+and prints a field-level diff against what's live (including prunes):
+
+```sh
+flux diff kustomization apps --path ./apps/laptop
+flux diff kustomization infra-controllers --path ./infrastructure/controllers/laptop
+```
+
+Exit code is `0` when clean, `1` when there are differences. For a
+Kustomization that doesn't exist in-cluster yet, add
+`--kustomization-file clusters/laptop/apps.yaml`. Whole-cluster preview:
+`flux diff kustomization flux-system --path ./clusters/laptop`.
+
+**Limit:** `flux diff` validates the `HelmRelease` object itself, not the
+chart it renders (helm-controller does that in-cluster). To check chart
+values against the chart's schema locally (`brew install yq` first):
+
+```sh
+helm pull oci://ghcr.io/immich-app/immich-charts/immich --version 0.13.1 --untar -d /tmp/chart
+yq '.spec.values' apps/base/immich/helmrelease.yaml > /tmp/values.yaml
+helm template immich /tmp/chart/immich -n immich -f /tmp/values.yaml
+```
+
+Once `flux diff` shows only what you intend: one commit, one push, one
+`flux reconcile`.
+
+## Validate in CI
+
+A PR check can render every overlay and schema-validate it with no cluster —
+`flux build` piped to [`kubeconform`](https://github.com/yannh/kubeconform).
+See the workflow in
+[fluxcd/flux2-kustomize-helm-example](https://github.com/fluxcd/flux2-kustomize-helm-example/tree/main/.github/workflows).
+
 ## Develop on a branch
 
-Flux tracks `main`. To validate changes on a branch first, point Flux at it:
+For most changes, **local validation above is enough** — `flux diff` against
+your working tree, then one commit to `main`. Point Flux at a branch only
+when you want the cluster to actually run the change for a while before
+merging (a new app, a risky upgrade).
+
+Flux tracks `main`. To have it track a branch:
 
 ```sh
 git switch -c feat/x
