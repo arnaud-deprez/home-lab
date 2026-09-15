@@ -1,8 +1,7 @@
 # TLS / HTTPS on the laptop cluster
 
 The `laptop` cluster issues certificates from an in-cluster private CA
-(`ca-issuer`, backed by the `home-lab-ca` root — see
-[docs/superpowers/specs/2026-09-15-https-traefik-design.md](superpowers/specs/2026-09-15-https-traefik-design.md)).
+(`ca-issuer`, backed by the `home-lab-ca` root in `infrastructure/configs/laptop/ca-issuer/`).
 Apps get a trusted-looking padlock only after that root is imported as a
 trusted CA on the device doing the browsing. This is a one-time step per
 device — not automated.
@@ -51,6 +50,27 @@ limited to the Secret-loss scenario below). If the Secret is ever lost
 `selfsigned-bootstrap` issues it — every device then needs the new
 `home-lab-ca.crt` re-imported, and previously-trusted certs from the old
 root stop being trusted.
+
+### Trusting the CA *inside* the cluster
+
+Pods only ever get the CA on `svc.cluster.local` reach for other pods; they
+have no reason to trust `home-lab-ca` for outbound HTTPS by default. This
+only matters when one app calls another app's `*.home.arpa` ingress
+server-side (not from the browser) — e.g. Immich's OIDC discovery fetch to
+`https://id.home.arpa` (see `apps/laptop/immich/ca-cert-configmap.yaml` and
+the `NODE_EXTRA_CA_CERTS` env var in `apps/laptop/immich/helmrelease-patch.yaml`).
+The pattern for any future app that needs this:
+
+1. Copy the CA cert into that app's namespace as a plain (unencrypted —
+   it's a public cert) `ConfigMap`.
+2. Mount it into the container and point the language runtime's CA bundle
+   env var at it (`NODE_EXTRA_CA_CERTS` for Node, `SSL_CERT_FILE` for Go,
+   `REQUESTS_CA_BUNDLE` for Python, etc.) — or add it to the container's
+   system trust store if there's no such env var.
+
+There's no cluster-wide auto-distribution of this CA (e.g. `trust-manager`)
+yet — each app that needs it gets its own copy, following Immich's example
+above.
 
 ### Verifying a specific app
 

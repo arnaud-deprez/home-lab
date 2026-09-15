@@ -6,6 +6,20 @@ metadata:
 spec:
   values:
     server:
+      persistence:
+        home-lab-ca-cert:
+          type: configMap
+          name: home-lab-ca-cert
+          globalMounts:
+            - path: /usr/local/share/ca-certificates/home-lab-ca.crt
+              subPath: ca.crt
+              readOnly: true
+      controllers:
+        main:
+          containers:
+            main:
+              env:
+                NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/home-lab-ca.crt
       ingress:
         main:
           enabled: true

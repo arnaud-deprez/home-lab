@@ -18,16 +18,21 @@ clusters/laptop/
   kustomization.yaml    # explicit entrypoint: resources + the SOPS decryption patch
   flux-system/          # Flux's own manifests — managed by `flux bootstrap`, don't hand-edit
   infrastructure.yaml   # Flux Kustomizations: infra-controllers -> infra-configs
-  apps.yaml             # Flux Kustomization: apps (after infra-controllers)
+  identity.yaml          # Flux Kustomization: identity (after infra-configs)
+  apps.yaml             # Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
   controllers/{base,laptop}   # operators, ingress   (reconciled first)
   configs/{base,laptop}       # storage classes, cluster config
+identity/{base,laptop}        # SSO (Pocket ID OIDC provider)
 apps/{base,laptop}            # workloads
 ```
 
 `base/` holds reusable definitions; `laptop/` is the per-cluster overlay
-(Kustomize patches). Ordering: `controllers` -> `configs` -> `apps`, because
-operators/CRDs must exist before the resources that use them.
+(Kustomize patches). Ordering: `controllers` -> `configs` -> `identity` ->
+`apps`, because operators/CRDs must exist before the resources that use
+them (`apps` doesn't `dependsOn` `identity` — no app is SSO-wired tightly
+enough yet to require it, they just reconcile independently once
+`infra-configs` is ready).
 
 ## Make a change
 

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-lab-ca-cert
+  namespace: immich
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIBcDCCARagAwIBAgIUKamkyhzsTuvWMl4VpIfIA7GbdHUwCgYIKoZIzj0EAwIw
+    FjEUMBIGA1UEAxMLaG9tZS1sYWItY2EwHhcNMjYwOTE1MTU0MTMxWhcNMzYwOTEy
+    MTU0MTMxWjAWMRQwEgYDVQQDEwtob21lLWxhYi1jYTBZMBMGByqGSM49AgEGCCqG
+    SM49AwEHA0IABFyBr8Bhs73/yyVkIFb6yrk3OJ9N7+h9RJcsCOdrnYlHqfVVU51s
+    y1wn1GVGHoNk8FA+LU+YRgtmYCS5PiKX0RajQjBAMA4GA1UdDwEB/wQEAwICpDAP
+    BgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBS1hjEHz7wnCDmcK7L9bbu+m8YlEDAK
+    BggqhkjOPQQDAgNIADBFAiEAggyPackts0yD4kyHs+oi7kJ+eKcgHWLYiXBV/Ha9
+    ggwCIDpZbagBr4qyC35Rn0uMerxGElQc0WzrYijp3zzUErgc
+    -----END CERTIFICATE-----

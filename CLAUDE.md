@@ -22,18 +22,22 @@ clusters/laptop/
   kustomization.yaml    entrypoint: resources + the SOPS decryption patch
   flux-system/           Flux's own manifests, managed by `flux bootstrap` — don't hand-edit
   infrastructure.yaml    Flux Kustomizations: infra-controllers -> infra-configs
-  apps.yaml               Flux Kustomization: apps (after infra-controllers)
+  identity.yaml           Flux Kustomization: identity (after infra-controllers, infra-configs)
+  apps.yaml               Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
   controllers/{base,laptop}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
   configs/{base,laptop}       cluster config (local-path-provisioner, private CA issuer)
+identity/{base,laptop}        SSO — Pocket ID OIDC provider (id.home.arpa)
 apps/{base,laptop}            workloads (Immich)
 ```
 
-`controllers` -> `configs` -> `apps`, enforced via `dependsOn` in the Flux
+`controllers` -> `configs` -> `identity`/`apps`, enforced via `dependsOn` in the Flux
 `Kustomization` objects, because operators/CRDs must exist before the resources that
-use them.
+use them. `apps` does not `dependsOn` `identity` — apps opt into SSO individually
+(configuring their own OIDC client against Pocket ID), so there's no hard ordering
+requirement between the two Kustomizations themselves.
 
-Every `infrastructure/*` and `apps/` component has `base/` (reusable manifests) +
+Every `infrastructure/*`, `identity/`, and `apps/` component has `base/` (reusable manifests) +
 `laptop/` (per-cluster Kustomize overlay/patches). A future VPS/on-prem cluster reuses
 `base/` and only overlays what differs (host, storage class, ingress exposure).
 

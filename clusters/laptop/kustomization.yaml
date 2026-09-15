@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   - flux-system
   - infrastructure.yaml
+  - identity.yaml
   - apps.yaml
 patches:
   # SOPS decryption is a per-cluster capability (it needs the `sops-age`

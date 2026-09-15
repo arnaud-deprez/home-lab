@@ -6,20 +6,23 @@ reconciles `clusters/laptop/` onto the cluster.
 
 | Component | Status | Where |
 |---|---|---|
-| Immich | ✅ | [`apps/base/immich/`](apps/base/immich/) — CloudNativePG + VectorChord, Valkey, ingress `immich.home.arpa` |
+| Immich | ✅ | [`apps/base/immich/`](apps/base/immich/) — CloudNativePG + VectorChord, Valkey, ingress `immich.home.arpa`; SSO login via Pocket ID |
+| SSO (Pocket ID) | ✅ | [`identity/base/pocket-id/`](identity/base/pocket-id/) — OIDC provider, passkey login, ingress `id.home.arpa` |
 | Reverse proxy (Traefik) | ✅ | [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/) — hostPort DaemonSet |
 | HTTPS / TLS (cert-manager) | ✅ | [`infrastructure/controllers/base/cert-manager/`](infrastructure/controllers/base/cert-manager/) — private CA, per-app certs via ingress-shim |
 | Tailscale | ⬜ | |
 | Nextcloud | ⬜ | |
+| Home Assistant | ⬜ | planned behind `oauth2-proxy` (no native OIDC support) |
 
 - **Working with Flux** — branches, secrets, day-to-day ops: [`docs/flux.md`](docs/flux.md)
 - **HTTPS / TLS trust setup**: [`docs/tls.md`](docs/tls.md)
 - **Bootstrapping a cluster**: [`bootstrap/README.md`](bootstrap/README.md)
 
-Immich is at `https://immich.home.arpa/` — add `192.168.64.5 immich.home.arpa`
-to `/etc/hosts` on the client (node IP; Traefik binds hostPort 80/443, and
-redirects HTTP to HTTPS). The cert is signed by an in-cluster private CA —
-see [`docs/tls.md`](docs/tls.md) to trust it on your device first.
+Immich is at `https://immich.home.arpa/`, Pocket ID (SSO) at
+`https://id.home.arpa/` — add both to `/etc/hosts` on the client, pointing
+at `192.168.64.5` (node IP; Traefik binds hostPort 80/443, and redirects
+HTTP to HTTPS). The cert is signed by an in-cluster private CA — see
+[`docs/tls.md`](docs/tls.md) to trust it on your device first.
 
 ## Repo layout
 
@@ -28,19 +31,20 @@ clusters/laptop/   Flux entrypoint — Kustomizations, ordering, SOPS decryption
 infrastructure/
   controllers/     operators & ingress (CloudNativePG, Traefik, cert-manager)   — reconciled first
   configs/         cluster config (local-path-provisioner, private CA issuer)
+identity/          SSO — Pocket ID OIDC provider
 apps/              workloads (Immich)
 ```
 
-Each of `infrastructure/*` and `apps/` has `base/` (reusable) + `laptop/`
-(per-cluster Kustomize overlay).
+Each of `infrastructure/*`, `identity/`, and `apps/` has `base/` (reusable) +
+`laptop/` (per-cluster Kustomize overlay).
 
 ## Design notes
 
 - **One Flux `HelmRelease` / Kustomization per component**, not an umbrella
   chart. Ordering via `dependsOn`; stateful dependencies via operators
   (CloudNativePG) rather than bundled subcharts.
-- **`controllers` → `configs` → `apps`** ordering — operators and CRDs must
-  exist before the resources that use them.
+- **`controllers` → `configs` → `identity`/`apps`** ordering — operators and
+  CRDs must exist before the resources that use them.
 - **`base/` + per-cluster overlay** so a future VPS / on-prem cluster reuses
   `base/` and only overlays what differs (host, storage class, sizes,
   ingress exposure).
