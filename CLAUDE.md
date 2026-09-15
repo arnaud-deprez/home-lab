@@ -24,8 +24,8 @@ clusters/laptop/
   infrastructure.yaml    Flux Kustomizations: infra-controllers -> infra-configs
   apps.yaml               Flux Kustomization: apps (after infra-controllers)
 infrastructure/
-  controllers/{base,laptop}   operators, ingress (CloudNativePG, Traefik) — reconciled first
-  configs/{base,laptop}       cluster config (local-path-provisioner)
+  controllers/{base,laptop}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
+  configs/{base,laptop}       cluster config (local-path-provisioner, private CA issuer)
 apps/{base,laptop}            workloads (Immich)
 ```
 

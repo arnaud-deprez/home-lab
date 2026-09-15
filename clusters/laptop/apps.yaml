@@ -6,6 +6,7 @@ metadata:
 spec:
   dependsOn:
     - name: infra-controllers
+    - name: infra-configs
   interval: 10m
   retryInterval: 1m
   timeout: 10m

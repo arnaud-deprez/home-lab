@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ../base/cnpg-operator
   - ../base/traefik
+  - ../base/cert-manager
 patches:
   - path: traefik-values-patch.yaml
     target:

@@ -10,10 +10,15 @@ spec:
         main:
           enabled: true
           className: traefik
+          annotations:
+            cert-manager.io/cluster-issuer: ca-issuer
           hosts:
             - host: immich.home.arpa
               paths:
                 - path: "/"
                   service:
                     identifier: main
-          tls: []
+          tls:
+            - hosts:
+                - immich.home.arpa
+              secretName: immich-tls

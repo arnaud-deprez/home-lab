@@ -8,22 +8,26 @@ reconciles `clusters/laptop/` onto the cluster.
 |---|---|---|
 | Immich | ✅ | [`apps/base/immich/`](apps/base/immich/) — CloudNativePG + VectorChord, Valkey, ingress `immich.home.arpa` |
 | Reverse proxy (Traefik) | ✅ | [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/) — hostPort DaemonSet |
+| HTTPS / TLS (cert-manager) | ✅ | [`infrastructure/controllers/base/cert-manager/`](infrastructure/controllers/base/cert-manager/) — private CA, per-app certs via ingress-shim |
 | Tailscale | ⬜ | |
 | Nextcloud | ⬜ | |
 
 - **Working with Flux** — branches, secrets, day-to-day ops: [`docs/flux.md`](docs/flux.md)
+- **HTTPS / TLS trust setup**: [`docs/tls.md`](docs/tls.md)
 - **Bootstrapping a cluster**: [`bootstrap/README.md`](bootstrap/README.md)
 
-Immich is at `http://immich.home.arpa/` — add `192.168.64.5 immich.home.arpa`
-to `/etc/hosts` on the client (node IP; Traefik binds hostPort 80/443).
+Immich is at `https://immich.home.arpa/` — add `192.168.64.5 immich.home.arpa`
+to `/etc/hosts` on the client (node IP; Traefik binds hostPort 80/443, and
+redirects HTTP to HTTPS). The cert is signed by an in-cluster private CA —
+see [`docs/tls.md`](docs/tls.md) to trust it on your device first.
 
 ## Repo layout
 
 ```
 clusters/laptop/   Flux entrypoint — Kustomizations, ordering, SOPS decryption patch
 infrastructure/
-  controllers/     operators & ingress (CloudNativePG, Traefik)   — reconciled first
-  configs/         cluster config (local-path-provisioner)
+  controllers/     operators & ingress (CloudNativePG, Traefik, cert-manager)   — reconciled first
+  configs/         cluster config (local-path-provisioner, private CA issuer)
 apps/              workloads (Immich)
 ```
 

@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - selfsigned-bootstrap-issuer.yaml
+  - home-lab-ca-certificate.yaml
+  - ca-issuer.yaml
