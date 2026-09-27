@@ -4,6 +4,8 @@ resources:
   - ../base/cnpg-operator
   - ../base/traefik
   - ../base/cert-manager
+  - ../base/tailscale-operator
+  - talos-api-endpoints.yaml
 patches:
   - path: traefik-values-patch.yaml
     target:

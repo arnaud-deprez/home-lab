@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: talos-api
+  namespace: tailscale-operator
+subsets:
+  - addresses:
+      - ip: 192.168.64.5
+    ports:
+      - name: talos-grpc
+        port: 50000
+        protocol: TCP
