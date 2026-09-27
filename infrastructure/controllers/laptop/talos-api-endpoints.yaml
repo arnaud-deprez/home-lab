@@ -1,3 +1,6 @@
+# IP is not kept in sync by any controller — if the node's address changes
+# (re-provision, DHCP lease change), update it here by hand. Compare against
+# `grep server: os/context/kubeconfig`, which points at the same node.
 apiVersion: v1
 kind: Endpoints
 metadata:

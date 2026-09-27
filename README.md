@@ -10,12 +10,13 @@ reconciles `clusters/laptop/` onto the cluster.
 | SSO (Pocket ID) | ✅ | [`identity/base/pocket-id/`](identity/base/pocket-id/) — OIDC provider, passkey login, ingress `id.home.arpa` |
 | Reverse proxy (Traefik) | ✅ | [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/) — hostPort DaemonSet |
 | HTTPS / TLS (cert-manager) | ✅ | [`infrastructure/controllers/base/cert-manager/`](infrastructure/controllers/base/cert-manager/) — private CA, per-app certs via ingress-shim |
-| Tailscale | ⬜ | |
+| Tailscale | ✅ | [`infrastructure/controllers/base/tailscale-operator/`](infrastructure/controllers/base/tailscale-operator/) — Kubernetes operator; exposes the k8s API server (API-server-proxy) and the Talos API for remote admin access over the tailnet — see [`docs/tailscale.md`](docs/tailscale.md) |
 | Nextcloud | ⬜ | |
 | Home Assistant | ⬜ | planned behind `oauth2-proxy` (no native OIDC support) |
 
 - **Working with Flux** — branches, secrets, day-to-day ops: [`docs/flux.md`](docs/flux.md)
 - **HTTPS / TLS trust setup**: [`docs/tls.md`](docs/tls.md)
+- **Tailscale remote admin access**: [`docs/tailscale.md`](docs/tailscale.md)
 - **Bootstrapping a cluster**: [`bootstrap/README.md`](bootstrap/README.md)
 
 Immich is at `https://immich.home.arpa/`, Pocket ID (SSO) at
