@@ -4,5 +4,6 @@ resources:
   - namespace.yaml
   - pvc.yaml
   - pocket-id-secret.sops.yaml
+  - postgres-cluster.yaml
   - deployment.yaml
   - service.yaml

@@ -37,6 +37,13 @@ spec:
               value: "true"
             - name: VERSION_CHECK_DISABLED
               value: "true"
+            - name: DB_PROVIDER
+              value: postgres
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: pocket-id-database-app
+                  key: uri
             - name: ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
