@@ -34,6 +34,10 @@ helm template immich /tmp/chart/immich -n immich -f /tmp/values.yaml
 
 Requires `export KUBECONFIG="$PWD/os/context/kubeconfig"` and, for SOPS-encrypted
 files, the age private key at `~/.config/sops/age/home-lab.agekey`.
+For the tierhive cluster use `clusters/tierhive` / `*/tierhive` paths, its own kubeconfig and the
+age key `~/.config/sops/age/tierhive.agekey`; `sops` needs both keys in
+`~/.config/sops/age/keys.txt` (and `export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt`) to edit
+either cluster's secrets.
 
 ## Common Flux commands
 

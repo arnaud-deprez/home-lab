@@ -63,8 +63,10 @@ admin console — there's no Flux-reconciled resource for them.
    scoped to `tag:k8s-operator`. Copy the client ID/secret (shown once).
 6. **Encrypt the OAuth credentials**:
    ```sh
-   sops infrastructure/controllers/base/tailscale-operator/operator-oauth.sops.yaml
+   sops infrastructure/controllers/<cluster>/operator-oauth.sops.yaml   # laptop or tierhive
    ```
+   Each cluster has its own secret (and its own OAuth client) in its overlay, encrypted to
+   that cluster's age key, and the file must be listed in that overlay's `kustomization.yaml`.
    Replace the placeholder `client_id`/`client_secret` values, save. The
    Secret must be named exactly `operator-oauth` with those two keys — this
    is a hardcoded fallback in the operator's Helm chart (used because
@@ -86,7 +88,7 @@ demand and can time out — just retry once.
 ```sh
 # Talos API — use the tailnet address shown for the talos-api Service
 kubectl get service talos-api -n tailscale-operator   # EXTERNAL-IP / MagicDNS name
-talosctl -e <talos-api-tailnet-address> -n 192.168.64.5 version
+talosctl -e <talos-api-tailnet-address> -n 192.168.64.5 version   # tierhive: -n 10.10.8.2
 ```
 
 RBAC for the impersonated identity is a normal `ClusterRoleBinding`
@@ -110,7 +112,10 @@ RBAC for the impersonated identity is a normal `ClusterRoleBinding`
 - **The Talos API `Endpoints` IP is not kept in sync by anything.** It's
   hardcoded in `infrastructure/controllers/laptop/talos-api-endpoints.yaml`
   (`192.168.64.5`, matching the node's kubeconfig server address). If the
-  node's address ever changes, update it there by hand.
+  node's address ever changes, update it there by hand. The tierhive cluster has its own
+  file (`infrastructure/controllers/tierhive/talos-api-endpoints.yaml`, `10.10.8.2`) and uses the
+  names `tailscale-operator-tierhive` / `talos-api-tierhive` (`tailscale configure kubeconfig
+  tailscale-operator-tierhive`).
 
 ## Explicitly out of scope
 

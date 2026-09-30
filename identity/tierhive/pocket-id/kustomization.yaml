@@ -4,3 +4,8 @@ resources:
   - ../../base/pocket-id
   - pocket-id-secret.sops.yaml
   - ingress.yaml
+patches:
+  - path: app-url-patch.yaml
+    target:
+      kind: Deployment
+      name: pocket-id

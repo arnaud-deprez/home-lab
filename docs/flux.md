@@ -1,7 +1,9 @@
 # Working with Flux
 
 This cluster is GitOps-managed by [Flux](https://fluxcd.io/). Flux watches
-`main` and reconciles `clusters/laptop/` onto the cluster every 10 minutes.
+`main` and reconciles `clusters/laptop/` onto the laptop cluster every 10 minutes.
+The TierHive VPS cluster uses the same layout under `clusters/tierhive/` (see
+[`tierhive.md`](tierhive.md)); replace `laptop` by `tierhive` in the paths below.
 Full docs: <https://fluxcd.io/flux/>.
 
 ## Prerequisites
@@ -21,13 +23,13 @@ clusters/laptop/
   identity.yaml          # Flux Kustomization: identity (after infra-configs)
   apps.yaml             # Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
-  controllers/{base,laptop}   # operators, ingress   (reconciled first)
-  configs/{base,laptop}       # storage classes, cluster config
-identity/{base,laptop}        # SSO (Pocket ID OIDC provider)
-apps/{base,laptop}            # workloads
+  controllers/{base,laptop,tierhive}   # operators, ingress   (reconciled first)
+  configs/{base,laptop,tierhive}       # storage classes, cluster config
+identity/{base,laptop,tierhive}        # SSO (Pocket ID OIDC provider)
+apps/{base,laptop,tierhive}            # workloads
 ```
 
-`base/` holds reusable definitions; `laptop/` is the per-cluster overlay
+`base/` holds reusable definitions; `laptop/` and `tierhive/` are the per-cluster overlays
 (Kustomize patches). Ordering: `controllers` -> `configs` -> `identity` ->
 `apps`, because operators/CRDs must exist before the resources that use
 them (`apps` doesn't `dependsOn` `identity` — no app is SSO-wired tightly
@@ -139,12 +141,18 @@ git branch -D feat/x            # squash-merged branches aren't seen as merged
 
 Decryption is applied to every Flux Kustomization by the patch in
 `clusters/laptop/kustomization.yaml` — no per-app setup. `.sops.yaml` at the
-repo root holds the encryption rules and the age **public** key.
+repo root holds the encryption rules and the age **public** keys: one key per cluster,
+selected by path (`*/tierhive/**` → tierhive key, `*/laptop/**` → laptop key). Secrets that
+differ per cluster live in that cluster's overlay, not in `base/`. To edit both clusters'
+secrets put both private keys in `~/.config/sops/age/keys.txt` and
+`export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt` (on macOS sops does not look there by default).
+**Never put `*.sops.yaml` in `base/`**: no rule matches there, so `sops` refuses to create it (a secret
+shared by both clusters would need both recipients added to a dedicated rule).
 
 Create an encrypted secret:
 
 ```sh
-cat > apps/base/<app>/foo.sops.yaml <<'EOF'
+cat > apps/<cluster>/<app>/foo.sops.yaml <<'EOF'
 apiVersion: v1
 kind: Secret
 metadata:
@@ -153,13 +161,13 @@ metadata:
 stringData:
   token: the-plaintext-value
 EOF
-sops --encrypt --in-place apps/base/<app>/foo.sops.yaml
+sops --encrypt --in-place apps/<cluster>/<app>/foo.sops.yaml
 # add foo.sops.yaml to that app's kustomization.yaml `resources:`
-git add apps/base/<app>/foo.sops.yaml && git commit -m "..." && git push
+git add apps/<cluster>/<app>/foo.sops.yaml && git commit -m "..." && git push
 ```
 
-- Edit later: `sops apps/base/<app>/foo.sops.yaml` (decrypts in `$EDITOR`, re-encrypts on save)
-- View: `sops -d apps/base/<app>/foo.sops.yaml`
+- Edit later: `sops apps/<cluster>/<app>/foo.sops.yaml` (decrypts in `$EDITOR`, re-encrypts on save)
+- View: `sops -d apps/<cluster>/<app>/foo.sops.yaml`
 - Filename must match `*.sops.yaml`; only `data` / `stringData` get encrypted
 - Rotate the age key: generate a new key, update `.sops.yaml`, run
   `sops updatekeys` on each `*.sops.yaml`, recreate the `sops-age` secret

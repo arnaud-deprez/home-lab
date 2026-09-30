@@ -1,0 +1,13 @@
+# Not kept in sync by any controller — update by hand if the node's internal IP changes.
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: talos-api
+  namespace: tailscale-operator
+subsets:
+  - addresses:
+      - ip: 10.10.8.2
+    ports:
+      - name: talos-grpc
+        port: 50000
+        protocol: TCP

@@ -1,8 +1,8 @@
 # TierHive — second Talos cluster
 
 Runbook for installing a single-node Talos cluster on a [TierHive](https://tierhive.com)
-VPS. Scope: **Talos + Kubernetes only**. Flux bootstrap and the `clusters/` overlay for
-this cluster come afterwards (see [`flux-bootstrap/README.md`](../flux-bootstrap/README.md)).
+VPS. Scope: Talos + Kubernetes, then Flux. The Flux overlay (`clusters/tierhive/`) and bootstrap steps are in
+*Flux on this cluster* below.
 
 The Talos patch used here lives in [`os/thierhive.patch.yaml`](../os/thierhive.patch.yaml).
 Generated secrets, ISOs and kubeconfigs go in `os/tierhivecontext/` and `_out/`
@@ -51,7 +51,7 @@ Forward these in the panel (Overview → Forwarded Ports):
 |---|---|---|---|
 | `6072` | `10.10.8.2:50000` | Talos API | `talosctl` |
 | `6075` | `10.10.8.2:6443` | Kubernetes API | `kubectl`, Flux |
-| 80 / 443 | `10.10.8.2:80/443` | Traefik ingress (hostPort) | Later — when apps are deployed |
+| — | — | HTTP/HTTPS for apps | Not a port forward: TierHive assigns public forward ports (e.g. `5777 → 443`), so 80/443 cannot be forwarded. Use the managed HAProxy, see *Public ingress* below |
 
 Port forwards are **unauthenticated at the network layer**. Until a machine config is
 applied, the Talos maintenance API accepts `--insecure` requests from anyone who finds the
@@ -179,6 +179,64 @@ talosctl get volumestatus
 `EPHEMERAL` should be capped at its `maxSize` and `u-local-path-provisioner` should be
 `ready` and mounted at `/var/mnt/local-path-provisioner`.
 
+## Public ingress (HAProxy)
+
+TLS is terminated by TierHive's managed HAProxy; Traefik only sees plain HTTP on
+`10.10.8.2:80`. There is no cert-manager on this cluster.
+
+1. Add one HAProxy domain per hostname — `id.vps.powple.com` and `immich.vps.powple.com`.
+   Backend `10.10.8.2`, port `80`. Point the DNS records (Namecheap) at the address TierHive
+   shows, then *Activate SSL*.
+2. HAProxy redirects HTTP→HTTPS, so Traefik's `web` entrypoint must **not** redirect (it would
+   loop). The tierhive overlay omits the redirect the laptop has.
+3. Traefik trusts `X-Forwarded-*` from `10.10.8.0/24`
+   (`infrastructure/controllers/tierhive/traefik-values-patch.yaml`). If logins fail the passkey
+   origin check, or apps see `http`, read the HAProxy source address from Traefik's access logs
+   and adjust `forwardedHeaders.trustedIPs`.
+4. Test early: large Immich uploads (body-size limit, timeouts).
+5. Test early: Immich's server-side OIDC calls to `https://id.vps.powple.com` leave the node and come back through HAProxy (hairpin). If TierHive's NAT blocks that, SSO login fails even though browsers work; fallback is a CoreDNS rewrite to Traefik (which then needs matching TLS).
+
+Risks: TierHive decrypts all traffic and the hop to the node is plain HTTP; HAProxy is a single
+point of failure on a public alpha. Keep Immich registration closed and review Pocket ID's
+signup/admin settings.
+
+## Flux on this cluster
+
+The cluster has its own age key, so a compromise of the VPS does not expose the laptop's
+secrets. Rules in `.sops.yaml`: `*/tierhive/**` → tierhive key.
+
+```sh
+age-keygen -o ~/.config/sops/age/tierhive.agekey     # once; never commit
+cat ~/.config/sops/age/home-lab.agekey ~/.config/sops/age/tierhive.agekey \
+  > ~/.config/sops/age/keys.txt                      # lets `sops` edit both clusters' secrets
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt # macOS sops does not read it by default
+
+# Prerequisite: create a NEW Tailscale OAuth client (docs/tailscale.md), then
+sops infrastructure/controllers/tierhive/operator-oauth.sops.yaml
+# and list `operator-oauth.sops.yaml` in infrastructure/controllers/tierhive/kustomization.yaml.
+# Without it the operator never starts, infra-controllers (wait: true) never turns Ready and
+# identity/apps are never deployed.
+
+export KUBECONFIG=os/tierhivecontext/kubeconfig
+kubectl create namespace flux-system
+kubectl -n flux-system create secret generic sops-age \
+  --from-file=age.agekey=$HOME/.config/sops/age/tierhive.agekey
+flux bootstrap github --owner=<owner> --repository=<repo> \
+  --branch=<feat/tierhive-cluster while validating, then main> \
+  --path=clusters/tierhive --personal
+```
+
+Follow the branch rules in [`flux.md`](flux.md): never flip `gotk-sync.yaml` to `main` while the
+cluster still tracks the feature branch.
+
+After the first reconcile:
+
+1. Create the Immich OIDC client in Pocket ID (`https://id.vps.powple.com`) and configure it in
+   Immich (UI steps).
+2. Once `talosctl`/`kubectl` work over the tailnet (operator `tailscale-operator-tierhive`,
+   Talos API `talos-api-tierhive`, see [`tailscale.md`](tailscale.md)), remove the public
+   `6072` / `6075` forwards.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
@@ -193,6 +251,5 @@ talosctl get volumestatus
 ## Open items
 
 - Confirm whether DHCP can be enabled in the panel (not needed if the static config stays).
-- Flux: a `clusters/tierhive/` overlay and Flux bootstrap, reusing `base/` and overlaying
-  only what differs (host, ingress exposure, storage). Not started.
+- Flux bootstrap for this cluster: see *Flux on this cluster* above (overlays exist, bootstrap not yet run).
 - Remote admin over Tailscale for this cluster: see [`docs/tailscale.md`](tailscale.md).

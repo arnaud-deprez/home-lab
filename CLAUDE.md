@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A single-node [Talos](https://www.talos.dev/) Kubernetes home lab, GitOps-managed by
-[Flux](https://fluxcd.io/). Flux watches `main` and reconciles `clusters/laptop/` onto
+[Flux](https://fluxcd.io/). Flux watches `main` and reconciles `clusters/laptop/` (and `clusters/tierhive/` for the TierHive VPS cluster) onto
 the cluster every 10 minutes. There is no application build/lint/test pipeline — this
 repo *is* the cluster's desired state, expressed as Kubernetes manifests, Kustomize
 overlays, and Flux `HelmRelease`/`Kustomization` objects.
@@ -18,17 +18,17 @@ what's needed to navigate and validate.
 ## Layout and reconcile order
 
 ```
-clusters/laptop/
+clusters/{laptop,tierhive}/    one Flux entrypoint per cluster; same file set:
   kustomization.yaml    entrypoint: resources + the SOPS decryption patch
   flux-system/           Flux's own manifests, managed by `flux bootstrap` — don't hand-edit
   infrastructure.yaml    Flux Kustomizations: infra-controllers -> infra-configs
   identity.yaml           Flux Kustomization: identity (after infra-controllers, infra-configs)
   apps.yaml               Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
-  controllers/{base,laptop}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
-  configs/{base,laptop}       cluster config (local-path-provisioner, private CA issuer)
-identity/{base,laptop}        SSO — Pocket ID OIDC provider (id.home.arpa)
-apps/{base,laptop}            workloads (Immich)
+  controllers/{base,laptop,tierhive}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
+  configs/{base,laptop,tierhive}       cluster config (local-path-provisioner, private CA issuer)
+identity/{base,laptop,tierhive}        SSO — Pocket ID OIDC provider (id.home.arpa / id.vps.powple.com)
+apps/{base,laptop,tierhive}            workloads (Immich)
 ```
 
 `controllers` -> `configs` -> `identity`/`apps`, enforced via `dependsOn` in the Flux
@@ -38,16 +38,19 @@ use them. `apps` does not `dependsOn` `identity` — apps opt into SSO individua
 requirement between the two Kustomizations themselves.
 
 Every `infrastructure/*`, `identity/`, and `apps/` component has `base/` (reusable manifests) +
-`laptop/` (per-cluster Kustomize overlay/patches). A future VPS/on-prem cluster reuses
-`base/` and only overlays what differs (host, storage class, ingress exposure).
+per-cluster overlays (`laptop/`, `tierhive/`; Kustomize patches). A new cluster reuses
+`base/` and only overlays what differs (host, storage class, ingress exposure). The tierhive
+cluster differs notably: TLS is terminated by TierHive's managed HAProxy (plain HTTP to
+Traefik, no redirect, no cert-manager) — see `docs/tierhive.md`.
 
 **Design conventions to preserve when adding a component:**
 - One Flux `HelmRelease` / `Kustomization` per component, not an umbrella chart.
   Order dependencies via `dependsOn`.
 - Traefik (hostPort DaemonSet), not ingress-nginx.
 - Secrets are SOPS + age encrypted (`*.sops.yaml`); decryption is patched onto every
-  Kustomization centrally from `clusters/laptop/kustomization.yaml` — no per-app setup
-  needed.
+  Kustomization centrally from each cluster's `kustomization.yaml` — no per-app setup
+  needed. Each cluster has its own age key (`.sops.yaml` selects by path); secrets that
+  differ per cluster live in that cluster's overlay, never in `base/`.
 
 Before making non-trivial changes, use the `flux-ops` skill to validate locally
 (kustomize render, dry-run, flux diff, helm template) — it also covers common Flux

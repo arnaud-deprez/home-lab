@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - ../base/cnpg-operator
   - ../base/traefik
-  - ../base/cert-manager
   - ../base/tailscale-operator
   - operator-oauth.sops.yaml
   - talos-api-endpoints.yaml
@@ -12,3 +11,11 @@ patches:
     target:
       kind: HelmRelease
       name: traefik
+  - path: tailscale-patch.yaml
+    target:
+      kind: HelmRelease
+      name: tailscale-operator
+  - path: talos-api-service-patch.yaml
+    target:
+      kind: Service
+      name: talos-api

@@ -2,7 +2,8 @@
 
 Home lab on a single-node [Talos](https://www.talos.dev/) cluster,
 GitOps-managed by [Flux](https://fluxcd.io/): Flux watches `main` and
-reconciles `clusters/laptop/` onto the cluster.
+reconciles `clusters/laptop/` onto the laptop cluster and `clusters/tierhive/` onto
+a second single-node cluster on a [TierHive](docs/tierhive.md) VPS.
 
 | Component                  | Status | Where                                                                                                                                                                                                                                                                                       |
 | -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -30,6 +31,7 @@ HTTP to HTTPS). The cert is signed by an in-cluster private CA — see
 
 ```
 clusters/laptop/   Flux entrypoint — Kustomizations, ordering, SOPS decryption patch
+clusters/tierhive/ same for the TierHive VPS (TLS via managed HAProxy, no cert-manager)
 infrastructure/
   controllers/     operators & ingress (CloudNativePG, Traefik, cert-manager)   — reconciled first
   configs/         cluster config (local-path-provisioner, private CA issuer)
@@ -38,7 +40,8 @@ apps/              workloads (Immich)
 ```
 
 Each of `infrastructure/*`, `identity/`, and `apps/` has `base/` (reusable) +
-`laptop/` (per-cluster Kustomize overlay).
+per-cluster Kustomize overlays (`laptop/`, `tierhive/`). Secrets that differ per cluster
+live in that cluster's overlay, encrypted with that cluster's own age key.
 
 ## Design notes
 
