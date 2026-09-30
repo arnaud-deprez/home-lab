@@ -1,0 +1,54 @@
+# machine:
+#   network:
+#     hostname: tierhive-01
+#     interfaces:
+#       - interface: ens3
+#         addresses: [10.10.8.2/24]
+#         routes:
+#           - network: 0.0.0.0/0
+#             gateway: 10.10.8.1
+#     nameservers: [1.1.1.1, 8.8.8.8]
+# time:
+#   servers: [time.cloudflare.com]
+---
+apiVersion: v1alpha1
+kind: LinkConfig
+name: ens3
+addresses:
+  - address: 10.10.8.2/24
+routes:
+  - gateway: 10.10.8.1
+---
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete
+---
+apiVersion: v1alpha1
+kind: UnattendedInstallConfig
+# The provisioning describes how the installation disk should be provisioned.
+provisioning:
+  # Matches disks to initialize as physical volumes.
+  diskSelector:
+    # in UTM (macos), the disk path is always /dev/vda, check `talosctl get disks --insecure --nodes $CONTROL_PLANE_IP --talosconfig $TALOSCONFIG`
+    match: disk.dev_path == "/dev/vda"
+  # wipe: true
+---
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 10GB
+  maxSize: 10GB
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: local-path-provisioner
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 1GB
+  maxSize: 20GB

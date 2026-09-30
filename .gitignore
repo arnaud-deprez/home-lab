@@ -1,5 +1,5 @@
 _out/
-os/context/
+os/*context/
 *.iso
 *.agekey
 *.decrypted.yaml
