@@ -8,3 +8,7 @@ spec:
   url: oci://ghcr.io/cloudnative-pg/charts/cloudnative-pg
   ref:
     tag: "0.29.1"
+  # 0.29.1 publishes the .prov layer before the chart layer; Flux takes layer 0 by default
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
