@@ -242,7 +242,10 @@ signup/admin settings.
 ## Flux on this cluster
 
 The cluster has its own age key, so a compromise of the VPS does not expose the laptop's
-secrets. Rules in `.sops.yaml`: `*/tierhive/**` → tierhive key.
+secrets. Rules in `.sops.yaml`: `*/tierhive/**` and `talos/tierhive/secrets*` → tierhive key.
+Key layout and injection are the same as for every cluster: see
+[Age keys](flux.md#age-keys-one-per-cluster) and
+[`../flux-bootstrap/README.md`](../flux-bootstrap/README.md).
 
 ```sh
 age-keygen -o ~/.config/sops/age/tierhive.agekey     # once; never commit

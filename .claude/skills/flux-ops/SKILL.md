@@ -32,9 +32,11 @@ yq '.spec.values' apps/base/immich/helmrelease.yaml > /tmp/values.yaml
 helm template immich /tmp/chart/immich -n immich -f /tmp/values.yaml
 ```
 
-Requires `export KUBECONFIG="$PWD/os/context/kubeconfig"` and, for SOPS-encrypted
-files, the age private key at `~/.config/sops/age/home-lab.agekey`.
-For the tierhive cluster use `clusters/tierhive` / `*/tierhive` paths, its own kubeconfig and the
+Requires `export KUBECONFIG="$PWD/talos/laptop/kubeconfig"` and, for SOPS-encrypted
+files, the cluster's age private key (laptop: `~/.config/sops/age/home-lab.agekey`). Each cluster has
+its own key, injected as the `sops-age` Secret in that cluster's `flux-system` namespace (see
+`docs/flux.md#age-keys-one-per-cluster`).
+For the tierhive cluster use `clusters/tierhive` / `*/tierhive` paths, its own kubeconfig (`talos/tierhive/kubeconfig`) and the
 age key `~/.config/sops/age/tierhive.agekey`; `sops` needs both keys in
 `~/.config/sops/age/keys.txt` (and `export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt`) to edit
 either cluster's secrets.
@@ -56,11 +58,16 @@ flux logs -f --level=error
 ## Secrets
 
 ```sh
-sops --encrypt --in-place apps/base/<app>/foo.sops.yaml   # create
-sops apps/base/<app>/foo.sops.yaml                          # edit (decrypts in $EDITOR, re-encrypts on save)
-sops -d apps/base/<app>/foo.sops.yaml                        # view plaintext
+sops --encrypt --in-place apps/<cluster>/<app>/foo.sops.yaml   # create
+sops apps/<cluster>/<app>/foo.sops.yaml                          # edit (decrypts in $EDITOR, re-encrypts on save)
+sops -d apps/<cluster>/<app>/foo.sops.yaml                        # view plaintext
 ```
 
-Filename must match `*.sops.yaml`; only `data`/`stringData` fields get encrypted; add
+Filename must match `*.sops.yaml` and live under a cluster overlay (`laptop/` or `tierhive/`,
+never `base/`: no rule matches there); only `data`/`stringData` fields get encrypted; add
 the file to that app's `kustomization.yaml` `resources:`. Encryption rules and the age
-public key are in `.sops.yaml` at the repo root.
+public keys are in `.sops.yaml` at the repo root.
+
+Talos secrets bundles (`talos/<cluster>/secrets.sops.yaml`) are not Kubernetes manifests: they
+are encrypted as a whole file by their own rules, not applied by Flux. See `README.md` (laptop)
+and `docs/tierhive.md`.

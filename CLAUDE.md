@@ -18,6 +18,9 @@ what's needed to navigate and validate.
 ## Layout and reconcile order
 
 ```
+talos/{laptop,tierhive}/       Talos OS config per cluster: patch + SOPS-encrypted secrets bundle
+                               (secrets.sops.yaml); generated configs/kubeconfig are git-ignored.
+                               Not applied by Flux — see README.md / docs/tierhive.md
 clusters/{laptop,tierhive}/    one Flux entrypoint per cluster; same file set:
   kustomization.yaml    entrypoint: resources + the SOPS decryption patch
   flux-system/           Flux's own manifests, managed by `flux bootstrap` — don't hand-edit

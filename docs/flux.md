@@ -9,9 +9,10 @@ Full docs: <https://fluxcd.io/flux/>.
 ## Prerequisites
 
 - `flux`, `kubectl`, `sops`, `age` — `brew install fluxcd/tap/flux sops age`
-- `export KUBECONFIG="$PWD/os/context/kubeconfig"`
-- age private key at `~/.config/sops/age/home-lab.agekey` (restore from the
-  password manager)
+- `export KUBECONFIG="$PWD/talos/laptop/kubeconfig"`
+- the age private key of the cluster you work on (laptop: `~/.config/sops/age/home-lab.agekey`,
+  tierhive: `~/.config/sops/age/tierhive.agekey`), restored from the password manager — see
+  [Age keys](#age-keys-one-per-cluster)
 
 ## Layout
 
@@ -140,14 +141,39 @@ git branch -D feat/x            # squash-merged branches aren't seen as merged
 ## Secrets (SOPS + age)
 
 Decryption is applied to every Flux Kustomization by the patch in
-`clusters/laptop/kustomization.yaml` — no per-app setup. `.sops.yaml` at the
+`clusters/<cluster>/kustomization.yaml` — no per-app setup. `.sops.yaml` at the
 repo root holds the encryption rules and the age **public** keys: one key per cluster,
-selected by path (`*/tierhive/**` → tierhive key, `*/laptop/**` → laptop key). Secrets that
+selected by path (`*/tierhive/**` → tierhive key, `*/laptop/**` → laptop key). Talos secrets
+bundles (`talos/<cluster>/secrets.sops.yaml`) follow the same per-cluster keys but are encrypted
+as a whole file (no `encrypted_regex`) and are not applied by Flux. Secrets that
 differ per cluster live in that cluster's overlay, not in `base/`. To edit both clusters'
 secrets put both private keys in `~/.config/sops/age/keys.txt` and
 `export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt` (on macOS sops does not look there by default).
 **Never put `*.sops.yaml` in `base/`**: no rule matches there, so `sops` refuses to create it (a secret
 shared by both clusters would need both recipients added to a dedicated rule).
+
+### Age keys (one per cluster)
+
+Each cluster decrypts with its own key, so compromising one cluster does not expose the
+other's secrets.
+
+| Cluster    | Key file                             | `.sops.yaml` rules                        |
+| ---------- | ------------------------------------ | ----------------------------------------- |
+| `laptop`   | `~/.config/sops/age/home-lab.agekey` | `*/laptop/**`, `talos/laptop/secrets*`    |
+| `tierhive` | `~/.config/sops/age/tierhive.agekey` | `*/tierhive/**`, `talos/tierhive/secrets*` |
+
+- **Injected into Flux** as the `sops-age` Secret (key `age.agekey`) in the `flux-system`
+  namespace of *that cluster* — same name everywhere, different content. The
+  `clusters/<cluster>/kustomization.yaml` patch points every Kustomization at it
+  (`spec.decryption.secretRef.name: sops-age`). Steps:
+  [`../flux-bootstrap/README.md`](../flux-bootstrap/README.md).
+- **Add a cluster:** `age-keygen -o ~/.config/sops/age/<cluster>.agekey`; add its public key as
+  two rules in `.sops.yaml` (`(^|/)<cluster>/.*\.sops\.ya?ml$` with
+  `encrypted_regex: ^(data|stringData)$`, and a whole-file rule for `talos/<cluster>/secrets*`);
+  store the private key in the password manager.
+- **Edit secrets of several clusters:** concatenate the key files into one,
+  `cat ~/.config/sops/age/*.agekey > ~/.config/sops/age/keys.txt`, and
+  `export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt` (see above).
 
 Create an encrypted secret:
 
@@ -168,9 +194,12 @@ git add apps/<cluster>/<app>/foo.sops.yaml && git commit -m "..." && git push
 
 - Edit later: `sops apps/<cluster>/<app>/foo.sops.yaml` (decrypts in `$EDITOR`, re-encrypts on save)
 - View: `sops -d apps/<cluster>/<app>/foo.sops.yaml`
-- Filename must match `*.sops.yaml`; only `data` / `stringData` get encrypted
-- Rotate the age key: generate a new key, update `.sops.yaml`, run
-  `sops updatekeys` on each `*.sops.yaml`, recreate the `sops-age` secret
+- Filename must match `*.sops.yaml`; only `data` / `stringData` get encrypted (Kubernetes
+  secrets; Talos bundles are fully encrypted)
+- Rotate a cluster's age key: generate a new key, update that cluster's rules in `.sops.yaml`,
+  run `sops updatekeys` on that cluster's `*.sops.yaml` files (including
+  `talos/<cluster>/secrets.sops.yaml`), recreate the `sops-age` secret **in that cluster**
+  (`kubectl -n flux-system create secret generic sops-age --from-file=age.agekey=<key> --dry-run=client -o yaml | kubectl apply -f -`)
 
 Guide: <https://fluxcd.io/flux/guides/mozilla-sops/>
 
@@ -190,14 +219,16 @@ flux logs -f --level=error                     # controller logs
 
 ## New cluster
 
-See [`../bootstrap/README.md`](../bootstrap/README.md).
+See [`../flux-bootstrap/README.md`](../flux-bootstrap/README.md).
 
 ## Upgrade Flux
 
 ```sh
 brew upgrade fluxcd/tap/flux
+# once per cluster: use that cluster's kubeconfig and --path
+export KUBECONFIG="$PWD/talos/<cluster>/kubeconfig"
 flux bootstrap github --owner=arnaud-deprez --repository=home-lab \
-  --branch=main --path=clusters/laptop --personal   # regenerates flux-system/
+  --branch=main --path=clusters/<cluster> --personal   # regenerates flux-system/
 ```
 
 Docs: <https://fluxcd.io/flux/installation/upgrade/>

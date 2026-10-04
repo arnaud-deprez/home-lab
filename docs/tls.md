@@ -18,7 +18,7 @@ taking effect.
 ### Export the root CA certificate
 
 ```sh
-export KUBECONFIG="$PWD/os/context/kubeconfig"
+export KUBECONFIG="$PWD/talos/laptop/kubeconfig"
 kubectl get secret home-lab-ca -n cert-manager -o jsonpath='{.data.ca\.crt}' \
   | base64 -d > home-lab-ca.crt
 ```

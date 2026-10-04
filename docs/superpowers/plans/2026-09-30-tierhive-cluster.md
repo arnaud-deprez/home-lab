@@ -19,7 +19,7 @@
 - Tailscale names must not collide with the laptop: operator hostname `tailscale-operator-tierhive`, Service hostname `talos-api-tierhive`.
 - Laptop cluster behaviour must not change (same resource names; identical rendered output).
 - One age key per cluster; `*/tierhive/**.sops.yaml` encrypted only to the tierhive key. Private keys are never committed (`*.agekey` is git-ignored).
-- Never read `os/*context/kubeconfig` or `talosconfig`.
+- Never read `talos/*/kubeconfig` or `talosconfig`.
 - Work on branch `feat/tierhive-cluster`. Commit messages end with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 - Keep base `*.yaml` style: 2-space indent, no comments unless they explain a non-obvious reason.
 
@@ -707,7 +707,7 @@ Uses its own age key so a compromise of the VPS does not expose the laptop's sec
 
 ```sh
 age-keygen -o ~/.config/sops/age/tierhive.agekey   # once; never commit
-export KUBECONFIG=os/tierhivecontext/kubeconfig
+export KUBECONFIG=talos/tierhive/kubeconfig
 kubectl create namespace flux-system
 kubectl -n flux-system create secret generic sops-age \
   --from-file=age.agekey=$HOME/.config/sops/age/tierhive.agekey

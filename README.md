@@ -19,7 +19,7 @@ a second single-node cluster on a [TierHive](docs/tierhive.md) VPS.
 - **HTTPS / TLS trust setup**: [`docs/tls.md`](docs/tls.md)
 - **Tailscale remote admin access**: [`docs/tailscale.md`](docs/tailscale.md)
 - **Second cluster on TierHive (Talos install)**: [`docs/tierhive.md`](docs/tierhive.md)
-- **Bootstrapping a cluster**: [`bootstrap/README.md`](bootstrap/README.md)
+- **Bootstrapping a cluster**: [`flux-bootstrap/README.md`](flux-bootstrap/README.md)
 
 Immich is at `https://immich.home.arpa/`, Pocket ID (SSO) at
 `https://id.home.arpa/` — add both to `/etc/hosts` on the client, pointing
@@ -30,6 +30,8 @@ HTTP to HTTPS). The cert is signed by an in-cluster private CA — see
 ## Repo layout
 
 ```
+talos/laptop/      Talos config for the laptop cluster: patch + SOPS-encrypted secrets bundle
+talos/tierhive/    same for the TierHive VPS (generated configs/kubeconfig are git-ignored)
 clusters/laptop/   Flux entrypoint — Kustomizations, ordering, SOPS decryption patch
 clusters/tierhive/ same for the TierHive VPS (TLS via managed HAProxy, no cert-manager)
 infrastructure/
@@ -58,9 +60,11 @@ live in that cluster's overlay, encrypted with that cluster's own age key.
   UTM NAT with no LoadBalancer. A VPS/on-prem overlay would swap in MetalLB
   or a cloud controller-manager.
 - **SOPS + age** for secrets. Decryption is patched onto every Kustomization
-  from `clusters/laptop/kustomization.yaml`; the age private key lives only
-  in the cluster (`sops-age` secret) and a password manager. No encrypted
-  secret exists yet — CNPG generates the Immich DB credentials.
+  from each cluster's `kustomization.yaml`; each cluster has its own age key,
+  which lives only in the cluster (`sops-age` secret) and a password manager.
+  The Talos secrets bundles (`talos/<cluster>/secrets.sops.yaml`) are encrypted
+  with the same per-cluster keys. Other secrets are generated in-cluster
+  (e.g. CNPG creates the Immich DB credentials).
 
 ## Setup
 
