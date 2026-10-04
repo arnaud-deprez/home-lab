@@ -41,8 +41,8 @@ name: EPHEMERAL
 provisioning:
   diskSelector:
     match: system_disk
-  minSize: 10GB
-  maxSize: 10GB
+  minSize: 20GB
+  maxSize: 20GB
 ---
 apiVersion: v1alpha1
 kind: UserVolumeConfig
@@ -51,4 +51,5 @@ provisioning:
   diskSelector:
     match: system_disk
   minSize: 1GB
-  maxSize: 20GB
+  maxSize: 30GB
+  grow: true

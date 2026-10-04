@@ -93,22 +93,41 @@ I am all-in on k8s for all the goodies and to easily automate deployment pipelin
 > To add a Local Path provisioner, the VM must contain 2 disks: 1 for the system and 1 for the volume (nvme simulation if possible)
 > In production, we should always use external/persistent storage to the VM that persists once the VM dies or is replaced.
 
+Each cluster has its own folder under `talos/` (`talos/laptop/`, `talos/tierhive/`), holding
+its patch and its SOPS-encrypted secrets bundle. Generate the secrets **first** and keep
+only the encrypted copy, so the cluster PKI stays stable and configs can be regenerated at
+any time (see [`docs/flux.md`](docs/flux.md) for the age keys, `.sops.yaml` selects the
+right one by path).
+
 Once the VM is started, there are a couple of env variables you need to set
 
 ```sh
-export CONTROL_PLANE_ID=x.x.x.x
-export WORKER_ID=x.x.x.x
-export TALOSCONFIG="_out/talosconfig"
+export CONTROL_PLANE_IP=x.x.x.x
+export WORKER_IP=x.x.x.x
+export TALOSCONFIG="$PWD/talos/laptop/talosconfig"
 ```
 
 ##### UTM (macos)
 
-On UTM, we need to patch the gen config to match disk locations.
+On UTM, we need to patch the config to match disk locations ([`talos/laptop/patch.yaml`](talos/laptop/patch.yaml)).
+The patch is applied at `apply-config` time, not at `gen config` time, so the generated
+base config stays unpatched.
 
 ```sh
-talosctl gen config talos-homelab https://$CONTROL_PLANE_IP:6443 --output-dir _out --force --config-patch @utm.patch.yaml
-# Create control plane node
-talosctl apply-config --insecure --nodes $CONTROL_PLANE_IP --file _out/controlplane.yaml
+# Once: generate the secrets bundle, encrypt it with SOPS, drop the plaintext.
+# Never regenerate it for a live cluster.
+talosctl gen secrets -o talos/laptop/secrets.yaml
+sops -e talos/laptop/secrets.yaml > talos/laptop/secrets.sops.yaml
+rm talos/laptop/secrets.yaml
+
+# Generate the base config from the decrypted secrets (no plaintext on disk)
+talosctl gen config talos-homelab https://$CONTROL_PLANE_IP:6443 \
+  --with-secrets <(sops -d talos/laptop/secrets.sops.yaml) \
+  --output-dir talos/laptop --force
+# Create control plane node, applying the UTM patch
+talosctl apply-config --insecure --nodes $CONTROL_PLANE_IP \
+  --file talos/laptop/controlplane.yaml \
+  --config-patch @talos/laptop/patch.yaml
 # Set endpoint in talosconfig. The endpoint is the reverse proxy ip where the control plane is reachable.
 talosctl --talosconfig $TALOSCONFIG config endpoint $CONTROL_PLANE_IP
 # Set the node ip. The node ip is the ip the VM that might be directly reachable from talosctl.
@@ -117,16 +136,22 @@ talosctl --talosconfig $TALOSCONFIG config node $CONTROL_PLANE_IP
 talosctl --talosconfig $TALOSCONFIG bootstrap
 # Wait for it to be ready, it can take few minutes to bootstrap etcd and k8s
 # Then retrieve k8s config
-talosctl --talosconfig $TALOSCONFIG kubeconfig _out/
+talosctl --talosconfig $TALOSCONFIG kubeconfig talos/laptop/
 ```
 
-Then backup config
+The generated `controlplane.yaml`, `worker.yaml`, `talosconfig` and `kubeconfig` embed
+credentials and are git-ignored; only `secrets.sops.yaml` and the patch are committed. If
+you lose them, regenerate from the secrets bundle:
 
 ```sh
-mv _out context
-export TALOSCONFIG="$PWD/context/talosconfig"
-export KUBECONFIG="$PWD/context/kubeconfig"
-# validate
+talosctl gen config talos-homelab https://$CONTROL_PLANE_IP:6443 \
+  --with-secrets <(sops -d talos/laptop/secrets.sops.yaml) --output-dir talos/laptop --force
+```
+
+Then validate
+
+```sh
+export KUBECONFIG="$PWD/talos/laptop/kubeconfig"
 talosctl --talosconfig $TALOSCONFIG dashboard
 kubectl get node
 ```

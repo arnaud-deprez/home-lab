@@ -1,4 +1,10 @@
 creation_rules:
+  # Talos secrets bundles (talosctl gen secrets): not k8s manifests, encrypt the whole file.
+  # Must come before the generic rules below.
+  - path_regex: (^|/)talos/tierhive/secrets(\.sops)?\.ya?ml$
+    age: age18txq486alpfcfq4eqldkarzc0n4p49znr3ehmws35vwtjx84pu0szq4gt8
+  - path_regex: (^|/)talos/laptop/secrets(\.sops)?\.ya?ml$
+    age: age1nl9yjkq033pufe0hc50fn3z5xrup356cne34p7mezg5m9slt440sawk002
   - path_regex: (^|/)tierhive/.*\.sops\.ya?ml$
     encrypted_regex: ^(data|stringData)$
     age: age18txq486alpfcfq4eqldkarzc0n4p49znr3ehmws35vwtjx84pu0szq4gt8

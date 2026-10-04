@@ -1,5 +1,9 @@
 _out/
-os/*context/
+**/kubeconfig
+**/talosconfig
+talos/**/secrets.yaml
+talos/*/controlplane.yaml
+talos/*/worker.yaml
 *.iso
 *.agekey
 *.decrypted.yaml
