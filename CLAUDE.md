@@ -25,22 +25,21 @@ clusters/{laptop,tierhive}/    one Flux entrypoint per cluster; same file set:
   kustomization.yaml    entrypoint: resources + the SOPS decryption patch
   flux-system/           Flux's own manifests, managed by `flux bootstrap` — don't hand-edit
   infrastructure.yaml    Flux Kustomizations: infra-controllers -> infra-configs
-  identity.yaml           Flux Kustomization: identity (after infra-controllers, infra-configs)
   apps.yaml               Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
   controllers/{base,laptop,tierhive}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
   configs/{base,laptop,tierhive}       cluster config (local-path-provisioner, private CA issuer)
-identity/{base,laptop,tierhive}        SSO — Pocket ID OIDC provider (id.home.arpa / id.vps.powple.com)
-apps/{base,laptop,tierhive}            workloads (Immich)
+apps/{base,laptop,tierhive}            workloads (Immich, Pocket ID OIDC provider — id.home.arpa / id.vps.powple.com;
+                                       Pocket ID lives in the `identity` namespace)
 ```
 
-`controllers` -> `configs` -> `identity`/`apps`, enforced via `dependsOn` in the Flux
+`controllers` -> `configs` -> `apps`, enforced via `dependsOn` in the Flux
 `Kustomization` objects, because operators/CRDs must exist before the resources that
-use them. `apps` does not `dependsOn` `identity` — apps opt into SSO individually
-(configuring their own OIDC client against Pocket ID), so there's no hard ordering
-requirement between the two Kustomizations themselves.
+use them. Pocket ID is just another app; other apps opt into SSO individually (configuring
+their own OIDC client against it), so there's no ordering between them. If something ever
+needs Pocket ID up first, split `apps` into per-app Kustomizations with `dependsOn`.
 
-Every `infrastructure/*`, `identity/`, and `apps/` component has `base/` (reusable manifests) +
+Every `infrastructure/*` and `apps/` component has `base/` (reusable manifests) +
 per-cluster overlays (`laptop/`, `tierhive/`; Kustomize patches). A new cluster reuses
 `base/` and only overlays what differs (host, storage class, ingress exposure). The tierhive
 cluster differs notably: TLS is terminated by TierHive's managed HAProxy (plain HTTP to

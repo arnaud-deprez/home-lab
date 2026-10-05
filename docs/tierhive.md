@@ -257,7 +257,7 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt # macOS sops does not read 
 sops infrastructure/controllers/tierhive/operator-oauth.sops.yaml
 # and list `operator-oauth.sops.yaml` in infrastructure/controllers/tierhive/kustomization.yaml.
 # Without it the operator never starts, infra-controllers (wait: true) never turns Ready and
-# identity/apps are never deployed.
+# apps are never deployed.
 
 export KUBECONFIG=talos/tierhive/kubeconfig
 kubectl create namespace flux-system

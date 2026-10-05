@@ -8,7 +8,7 @@ a second single-node cluster on a [TierHive](docs/tierhive.md) VPS.
 | Component                  | Status | Where                                                                                                                                                                                                                                                                                       |
 | -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Immich                     | ✅     | [`apps/base/immich/`](apps/base/immich/) — CloudNativePG + VectorChord, Valkey, ingress `immich.home.arpa`; SSO login via Pocket ID                                                                                                                                                         |
-| SSO (Pocket ID)            | ✅     | [`identity/base/pocket-id/`](identity/base/pocket-id/) — OIDC provider, passkey login, ingress `id.home.arpa`                                                                                                                                                                               |
+| SSO (Pocket ID)            | ✅     | [`apps/base/pocket-id/`](apps/base/pocket-id/) — OIDC provider, passkey login, ingress `id.home.arpa`                                                                                                                                                                               |
 | Reverse proxy (Traefik)    | ✅     | [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/) — hostPort DaemonSet                                                                                                                                                                                 |
 | HTTPS / TLS (cert-manager) | ✅     | [`infrastructure/controllers/base/cert-manager/`](infrastructure/controllers/base/cert-manager/) — private CA, per-app certs via ingress-shim                                                                                                                                               |
 | Tailscale                  | ✅     | [`infrastructure/controllers/base/tailscale-operator/`](infrastructure/controllers/base/tailscale-operator/) — Kubernetes operator; exposes the k8s API server (API-server-proxy) and the Talos API for remote admin access over the tailnet — see [`docs/tailscale.md`](docs/tailscale.md) |
@@ -37,11 +37,10 @@ clusters/tierhive/ same for the TierHive VPS (TLS via managed HAProxy, no cert-m
 infrastructure/
   controllers/     operators & ingress (CloudNativePG, Traefik, cert-manager)   — reconciled first
   configs/         cluster config (local-path-provisioner, private CA issuer)
-identity/          SSO — Pocket ID OIDC provider
-apps/              workloads (Immich)
+apps/              workloads (Immich, Pocket ID OIDC provider)
 ```
 
-Each of `infrastructure/*`, `identity/`, and `apps/` has `base/` (reusable) +
+Each of `infrastructure/*` and `apps/` has `base/` (reusable) +
 per-cluster Kustomize overlays (`laptop/`, `tierhive/`). Secrets that differ per cluster
 live in that cluster's overlay, encrypted with that cluster's own age key.
 
@@ -50,7 +49,7 @@ live in that cluster's overlay, encrypted with that cluster's own age key.
 - **One Flux `HelmRelease` / Kustomization per component**, not an umbrella
   chart. Ordering via `dependsOn`; stateful dependencies via operators
   (CloudNativePG) rather than bundled subcharts.
-- **`controllers` → `configs` → `identity`/`apps`** ordering — operators and
+- **`controllers` → `configs` → `apps`** ordering — operators and
   CRDs must exist before the resources that use them.
 - **`base/` + per-cluster overlay** so a future VPS / on-prem cluster reuses
   `base/` and only overlays what differs (host, storage class, sizes,
