@@ -1,0 +1,73 @@
+apiVersion: v1alpha1
+kind: HostnameConfig
+auto: "off"
+hostname: euronodes
+---
+apiVersion: v1alpha1
+kind: LinkConfig
+name: ens18
+addresses:
+  - address: 178.159.34.177/24
+routes:
+  - gateway: 178.159.34.1
+---
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: 1.1.1.1
+  - address: 9.9.9.9
+---
+apiVersion: v1alpha1
+kind: TimeSyncConfig
+ntp:
+  servers:
+    - time.cloudflare.com
+---
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete
+---
+apiVersion: v1alpha1
+kind: UnattendedInstallConfig
+provisioning:
+  diskSelector:
+    match: disk.dev_path == "/dev/sda"
+---
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: STATE
+encryption:
+  provider: luks2
+  keys:
+    - slot: 0
+      nodeID: {}
+---
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 40GB
+  maxSize: 40GB
+encryption:
+  provider: luks2
+  keys:
+    - slot: 0
+      nodeID: {}
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: local-path-provisioner
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 1GB
+  grow: true
+encryption:
+  provider: luks2
+  keys:
+    - slot: 0
+      nodeID: {}
