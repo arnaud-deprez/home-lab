@@ -71,3 +71,10 @@ encryption:
   keys:
     - slot: 0
       nodeID: {}
+---
+apiVersion: v1alpha1
+kind: RegistryMirrorConfig
+name: registry.k8s.io
+endpoints:
+  - url: https://europe-west4-docker.pkg.dev/v2/k8s-artifacts-prod/images
+    overridePath: true
