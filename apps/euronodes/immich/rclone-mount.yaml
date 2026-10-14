@@ -37,6 +37,7 @@ spec:
             - "crypt:"
             - /mnt/rclone
             - --allow-other
+            - --allow-non-empty
             - --vfs-cache-mode=writes
             - --cache-dir=/cache
             - --vfs-cache-max-size=15G

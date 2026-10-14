@@ -78,3 +78,8 @@ name: registry.k8s.io
 endpoints:
   - url: https://europe-west4-docker.pkg.dev/v2/k8s-artifacts-prod/images
     overridePath: true
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: rclone
+volumeType: directory
