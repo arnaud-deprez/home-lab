@@ -1,4 +1,35 @@
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rclone-mount
+  namespace: immich
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rclone-mount-restart-immich
+  namespace: immich
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["immich-server"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rclone-mount-restart-immich
+  namespace: immich
+subjects:
+  - kind: ServiceAccount
+    name: rclone-mount
+    namespace: immich
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rclone-mount-restart-immich
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: rclone-cache
@@ -28,6 +59,7 @@ spec:
       labels:
         app: rclone-mount
     spec:
+      serviceAccountName: rclone-mount
       terminationGracePeriodSeconds: 120
       containers:
         - name: rclone
@@ -57,6 +89,44 @@ spec:
               mountPath: /cache
             - name: fuse
               mountPath: /dev/fuse
+        - name: restart-immich-on-remount
+          image: curlimages/curl:8.23.0
+          command:
+            - sh
+            - -c
+            - |
+              # Immich binds subfolders of the FUSE mount; after rclone remounts it keeps a
+              # dead mount until restarted. A new mount shows up as a new device number.
+              api=https://kubernetes.default.svc/apis/apps/v1/namespaces/immich/deployments/immich-server
+              sa=/var/run/secrets/kubernetes.io/serviceaccount
+              last=""
+              while true; do
+                cur=""
+                if [ -f /mnt/rclone/.mounted ]; then cur=$(stat -c %d /mnt/rclone 2>/dev/null); fi
+                if [ -n "$cur" ] && [ "$cur" != "$last" ]; then
+                  echo "rclone mount is device $cur (was ${last:-none}): restarting immich-server"
+                  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                  if curl -sS --fail --cacert $sa/ca.crt -H "Authorization: Bearer $(cat $sa/token)" \
+                    -X PATCH -H 'Content-Type: application/strategic-merge-patch+json' \
+                    -d "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"$ts\"}}}}}" \
+                    $api >/dev/null; then
+                    last=$cur
+                  else
+                    echo "restart request failed, will retry"
+                  fi
+                fi
+                sleep 5
+              done
+          volumeMounts:
+            - name: mount
+              mountPath: /mnt/rclone
+              mountPropagation: HostToContainer
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
       volumes:
         - name: mount
           hostPath:
