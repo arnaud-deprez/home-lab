@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rclone-cache
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rclone-mount
+  namespace: immich
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rclone-mount
+  template:
+    metadata:
+      labels:
+        app: rclone-mount
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: rclone
+          image: rclone/rclone:1.75.2
+          args:
+            - mount
+            - "crypt:"
+            - /mnt/rclone
+            - --allow-other
+            - --vfs-cache-mode=writes
+            - --cache-dir=/cache
+            - --vfs-cache-max-size=15G
+            - --vfs-write-back=5s
+            - --dir-cache-time=1m
+            - --umask=000
+          envFrom:
+            - secretRef:
+                name: rclone-config
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: mount
+              mountPath: /mnt/rclone
+              mountPropagation: Bidirectional
+            - name: cache
+              mountPath: /cache
+            - name: fuse
+              mountPath: /dev/fuse
+      volumes:
+        - name: mount
+          hostPath:
+            path: /var/mnt/rclone
+            type: DirectoryOrCreate
+        - name: cache
+          persistentVolumeClaim:
+            claimName: rclone-cache
+        - name: fuse
+          hostPath:
+            path: /dev/fuse
+            type: CharDevice
