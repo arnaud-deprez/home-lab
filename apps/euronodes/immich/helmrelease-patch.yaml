@@ -24,40 +24,38 @@ spec:
                 - immich.euronodes.powple.com
               secretName: immich-tls
       persistence:
-        rclone-library:
-          type: hostPath
-          hostPath: /var/mnt/rclone/library
-          hostPathType: Directory
-          globalMounts:
-            - path: /data/library
-              mountPropagation: HostToContainer
-        rclone-upload:
-          type: hostPath
-          hostPath: /var/mnt/rclone/upload
-          hostPathType: Directory
-          globalMounts:
-            - path: /data/upload
-              mountPropagation: HostToContainer
-        rclone-sentinel:
+        rclone:
           type: hostPath
           hostPath: /var/mnt/rclone
           hostPathType: Directory
           advancedMounts:
             main:
-              wait-mount:
+              main:
+                - path: /mnt/rclone
+                  mountPropagation: HostToContainer
+              link-mount:
                 - path: /mnt/rclone
                   mountPropagation: HostToContainer
       controllers:
         main:
           initContainers:
-            wait-mount:
+            link-mount:
               image:
                 repository: busybox
                 tag: "1.37"
               command:
                 - sh
                 - -c
-                - until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
+                - |
+                  until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
+                  for d in library upload; do
+                    [ -L /data/$d ] && continue
+                    if [ -n "$(find /data/$d -mindepth 1 ! -name .immich 2>/dev/null)" ]; then
+                      echo "refusing to replace /data/$d: it holds local data"; exit 1
+                    fi
+                    rm -rf /data/$d
+                    ln -s /mnt/rclone/$d /data/$d
+                  done
     machine-learning:
       controllers:
         main:
