@@ -65,6 +65,7 @@ checking against the box's pinned keys.
 ## 3. Day-to-day
 
 ```sh
+# the Kubernetes API is only reachable over Tailscale: see "Reaching the cluster" in euronodes.md
 export KUBECONFIG=$PWD/talos/euronodes/kubeconfig
 
 kubectl get cronjob -A                          # schedule and last run
@@ -230,7 +231,8 @@ The passkeys live in the database, so they come back with it. They work as long 
 Full order. Stop at any step that fails and fix it before moving on.
 
 1. Order the new VM and install Talos using the same secrets bundle, then bootstrap Flux with the same age key
-   (see [`euronodes.md`](euronodes.md)). The cluster identity and all encrypted secrets come back from git.
+   (see [`euronodes.md`](euronodes.md)). The cluster identity and all encrypted secrets come back from git. Until the
+   Tailscale operator is up on the new VM, ports 50000 and 6443 may need to be opened temporarily in the console firewall.
 2. When the apps are deployed, **pause the jobs and Immich** (section 5, top) and scale Pocket ID down.
 3. If the S3 bucket and its crypt passwords are intact, nothing to do for the photos: check the rclone pod is running
    and the mount shows `.mounted`. If the bucket is gone too, do 5.4.

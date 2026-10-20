@@ -1,8 +1,9 @@
 # EuroNodes — third Talos cluster
 
 Runbook for the single-node Talos cluster on a [EuroNodes](https://euronodes.com) VPS (Portugal),
-GitOps-managed by Flux like the other clusters. Design rationale:
-[`superpowers/specs/2026-10-12-euronodes-cluster-design.md`](superpowers/specs/2026-10-12-euronodes-cluster-design.md).
+GitOps-managed by Flux like the other clusters. The decisions and their reasons are in the table below;
+backups and restore are in [`backup-restore.md`](backup-restore.md), remote admin access in
+[`tailscale.md`](tailscale.md).
 
 Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and the SOPS-encrypted
 `secrets.sops.yaml`. **The generated `controlplane.yaml`, `worker.yaml`, `talosconfig` and
@@ -24,7 +25,7 @@ Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and 
 | Topology | One node, control plane and worker |
 | Disk | `EPHEMERAL` capped at 40 GB, `local-path-provisioner` user volume takes the rest; all volumes LUKS2 with the **node-ID key** |
 | Storage engine | `local-path` (one node; replicated engines add nothing) |
-| API exposure | Talos API (50000) and Kubernetes API (6443) are public, protected by mutual TLS. No source-IP firewall (dynamic home IP) |
+| API exposure | Talos API (50000) and Kubernetes API (6443) are **closed to the internet** by the EuroNodes console firewall and reached over Tailscale only (see _Reaching the cluster_). Only 80 and 443 are open. |
 | Ingress | Traefik terminates TLS on the node (hostPort 80/443); cert-manager, one Let's Encrypt certificate per host over HTTP-01 |
 | Domain | `*.euronodes.powple.com` (placeholder: hosts live in `apps/euronodes/*`, change them there) |
 | Immich originals | `library` and `upload` on EuroNodes S3 through an rclone-crypt mount; everything else local |
@@ -99,9 +100,34 @@ talosctl apply-config -f talos/euronodes/controlplane.yaml --config-patch @talos
 Check `talosctl get volumestatus`: `STATE`, `EPHEMERAL` and `u-local-path-provisioner` must show
 `encryptionProvider: luks2`. Rebooting must bring the node back with all volumes unlocked.
 
-`talosctl` always talks to the Talos API on **50000**, not 6443. If it times out while 443 and
-6443 work, a network between you and the VM is filtering that port (seen once from another network);
-try another connection.
+### Reaching the cluster
+
+The EuroNodes console firewall allows inbound TCP **80 and 443** only; ports 50000 (Talos API) and 6443
+(Kubernetes API) are closed to the internet. Tailscale needs no inbound rule (it connects out, and a direct
+path forms through the VM's public address), so do not block outbound traffic or the replies to it.
+Everything administrative goes through the tailnet:
+
+```sh
+# Kubernetes: adds a context to your kubeconfig that goes through the operator's proxy
+tailscale configure kubeconfig tailscale-operator-euronodes
+kubectl get nodes
+
+# Talos: use the Talos API Service's MagicDNS name as the endpoint, never the public address
+export TALOSCONFIG=$PWD/talos/euronodes/talosconfig
+talosctl -e talos-api-euronodes.<your-tailnet>.ts.net -n 178.159.34.177 version
+```
+
+- **Always set `TALOSCONFIG`.** The default `~/.talos/config` may belong to another cluster; the symptom is
+  `x509: certificate signed by unknown authority`.
+- The endpoint's certificate must list the tailnet name and IP as SANs (the `--additional-sans` above); without
+  them `talosctl` fails with `certificate is valid for …, not 100.x.x.x`.
+- `talosctl` always talks to the Talos API on 50000; a time-out on the public address is the firewall doing its job.
+- **If Tailscale ever breaks** (the operator is down, credentials expired, a bad ACL), the way back in is the
+  EuroNodes web console: temporarily allow 50000 and 6443 in the console firewall and use the public address, then
+  close them again. The `talosconfig` and `kubeconfig` generated for this cluster are git-ignored and live only on
+  your laptop; keep them (or regenerate them with the commands above).
+- A local DNS forwarder (for example `dnsmasq`) in front of Tailscale's DNS caused intermittent time-outs once;
+  scope such a resolver to private domains only.
 
 ### Google registry block
 
@@ -118,16 +144,16 @@ Check the Talos 1.14 docs for the exact `talosctl upgrade` options that keep dat
 
 ## Flux
 
-Flux tracks the branch while it is developed, then `main` (see
-[`flux.md`](flux.md#develop-on-a-branch) for the merge order; the rule that matters: never push a
-`gotk-sync.yaml` set to `main` to a branch the live cluster still tracks).
+Flux tracks `main`. To try a change on the live cluster first, follow [`flux.md`](flux.md#develop-on-a-branch);
+the rule that matters: never push a `gotk-sync.yaml` set to `main` to a branch the live cluster still tracks, and
+repoint the cluster to `main` before deleting a branch it follows.
 
 ```sh
 export KUBECONFIG=$PWD/talos/euronodes/kubeconfig
 kubectl create namespace flux-system
 kubectl -n flux-system create secret generic sops-age --from-file=age.agekey=$HOME/.config/sops/age/euronodes.agekey
 flux bootstrap github --owner=arnaud-deprez --repository=home-lab \
-  --branch=<feat-branch-or-main> --path=clusters/euronodes --personal
+  --branch=main --path=clusters/euronodes --personal
 flux get kustomizations      # infra-controllers, infra-configs, apps: READY True
 ```
 
@@ -135,21 +161,17 @@ The cluster has its own age key (`.sops.yaml` rules `*/euronodes/**` and `talos/
 
 ## Tailscale (remote admin access)
 
-Set up as described in [`tailscale.md`](tailscale.md); this cluster's own files (OAuth secret, names
-`tailscale-operator-euronodes` / `talos-api-euronodes`, Talos API address `178.159.34.177`) are in
+Deployed and verified: the operator (`tailscale-operator-euronodes`) proxies the Kubernetes API and exposes the Talos
+API as `talos-api-euronodes`. Set up as described in [`tailscale.md`](tailscale.md); this cluster's own files (OAuth
+secret, names, Talos API address `178.159.34.177`) are in
 [`infrastructure/controllers/euronodes/`](../infrastructure/controllers/euronodes/).
 
-1. Create an OAuth client for this cluster (`tailscale.md`, step 5).
-2. Fill the credentials: `sops infrastructure/controllers/euronodes/operator-oauth.sops.yaml`, replace both
-   `REPLACE_ME_…` values and save. **Do not push the placeholder** (it blocks `infra-controllers`, see `tailscale.md`).
-3. Push, then check `kubectl -n tailscale-operator get pods` and the two new devices in the Tailscale admin console.
-4. Add the Talos API Service's tailnet IP and MagicDNS name to the certificate (they are `--additional-sans` in the
-   command above; regenerate with `--force`, apply, no reboot), then over the tailnet:
-   `tailscale configure kubeconfig tailscale-operator-euronodes` and
-   `talosctl -e <talos-api-euronodes MagicDNS name> -n 178.159.34.177 version`.
-
-Closing the public Talos and Kubernetes APIs (Talos ingress firewall) is a separate, later step: only do it after
-step 4 works, and keep EuroNodes' web console as the way back in.
+To (re)create it: make an OAuth client for this cluster (`tailscale.md`, step 5), put its credentials into
+`operator-oauth.sops.yaml` with `sops` (**never push the placeholder values**: they block `infra-controllers`, see
+`tailscale.md`), push, and check `kubectl -n tailscale-operator get pods` and the two devices in the Tailscale admin
+console. Then add the Talos API Service's tailnet IP and MagicDNS name to the certificate
+(`kubectl get service talos-api -n tailscale-operator`, the `--additional-sans` in the config command above,
+regenerate with `--force`, apply; no reboot).
 
 ## DNS and TLS
 
@@ -176,7 +198,8 @@ How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
   and `directory_markers=true` (so empty folders persist).
 - **Watchdog.** After the rclone pod is replaced, Immich keeps a dead bind mount until restarted. A
   sidecar in the rclone pod watches the mount's device number and patches Immich's `restartedAt`
-  annotation (RBAC limited to `get`/`patch` on that one Deployment). Immich is writable again about
+  annotation (RBAC limited to `patch` on that one Deployment; the service-account token is mounted only in that
+  sidecar, not in the privileged rclone container). Immich is writable again about
   20 seconds after a kill.
 - Moving an existing library onto the mount: Immich's integrity check refuses to start if the `.immich`
   marker file is missing in `library/` or `upload/`. Copy the markers across from the old volume.
@@ -208,8 +231,11 @@ Keep in a password manager: the age private key, the restic password, the Storag
 - The VM UUID changing makes the volumes unreadable (restore from backup).
 - Google registries block this IP range: upgrades may fail until a mirror exists.
 - The S3 bucket is the live copy, not a backup. The Storage Box is the second copy; enable its snapshots.
-- The Talos and Kubernetes APIs are open to the internet behind mutual TLS; a Tailscale restriction
-  is possible later.
+- The Talos and Kubernetes APIs are reachable only through Tailscale. If the tailnet path breaks, access needs
+  the EuroNodes console (see _Reaching the cluster_).
+- Immich and Pocket ID are public (ports 80/443). Making them private behind Tailscale is possible, but it needs
+  DNS-01 certificates (HTTP-01 needs port 80 reachable) and every user on the VPN; passkeys are tied to the
+  hostname, so keep the hostnames unchanged.
 - Traefik: port 80 (redirect and ACME only) has 30 s timeouts. Port 443 allows requests up to 1 h so large Immich
   uploads and downloads on slow links are not cut; shorten it if uploads are always small.
 - rclone has a 512 MiB memory limit (it used 78 MiB, peaking at 174 MiB, during testing). An out-of-memory kill
@@ -219,5 +245,5 @@ Keep in a password manager: the age private key, the restic password, the Storag
 - S3 request signing uses the legacy V2 scheme because the server rejects V4.
 - **Nothing alerts when a backup fails or stops.** The jobs have deadlines (Immich 12 h, Pocket ID 1 h) so a
   hang cannot block later runs, but a failed or skipped run is only visible with `kubectl get jobs -A`.
-  The disk-usage alert in the design spec is not implemented either. Check the jobs now and then until
+  There is no disk-usage alert either. Check the jobs now and then until
   monitoring is added (for example a healthchecks-style ping at the end of each job).
