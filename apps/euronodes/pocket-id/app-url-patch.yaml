@@ -10,7 +10,7 @@ spec:
         - name: pocket-id
           env:
             - name: APP_URL
-              value: https://id.euronodes.powple.com
+              value: https://id.vps.powple.com
             - name: ANALYTICS_DISABLED
               value: "true"
             - name: VERSION_CHECK_DISABLED

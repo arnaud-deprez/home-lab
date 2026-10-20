@@ -9,10 +9,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - id.euronodes.powple.com
+        - id.vps.powple.com
       secretName: pocket-id-tls
   rules:
-    - host: id.euronodes.powple.com
+    - host: id.vps.powple.com
       http:
         paths:
           - path: /

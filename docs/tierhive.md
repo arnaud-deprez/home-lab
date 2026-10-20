@@ -223,9 +223,11 @@ talosctl get volumestatus
 TLS is terminated by TierHive's managed HAProxy; Traefik only sees plain HTTP on
 `10.10.8.2:80`. There is no cert-manager on this cluster.
 
-1. Add one HAProxy domain per hostname — `id.vps.powple.com` and `immich.vps.powple.com`.
+1. Add one HAProxy domain per hostname — `id.tierhive.powple.com` and `immich.tierhive.powple.com`.
    Backend `10.10.8.2`, port `80`. Point the DNS records (Namecheap) at the address TierHive
-   shows, then _Activate SSL_.
+   shows, then _Activate SSL_. The DNS wildcard for this cluster is
+   `*.tierhive.powple.com` (create it again when the cluster is brought back; the old `*.vps.powple.com` name now
+   belongs to the EuroNodes cluster).
 2. HAProxy redirects HTTP→HTTPS, so Traefik's `web` entrypoint must **not** redirect (it would
    loop). The tierhive overlay omits the redirect the laptop has.
 3. Traefik trusts `X-Forwarded-*` from `10.10.8.0/24`
@@ -233,7 +235,7 @@ TLS is terminated by TierHive's managed HAProxy; Traefik only sees plain HTTP on
    origin check, or apps see `http`, read the HAProxy source address from Traefik's access logs
    and adjust `forwardedHeaders.trustedIPs`.
 4. Test early: large Immich uploads (body-size limit, timeouts).
-5. Test early: Immich's server-side OIDC calls to `https://id.vps.powple.com` leave the node and come back through HAProxy (hairpin). If TierHive's NAT blocks that, SSO login fails even though browsers work; fallback is a CoreDNS rewrite to Traefik (which then needs matching TLS).
+5. Test early: Immich's server-side OIDC calls to `https://id.tierhive.powple.com` leave the node and come back through HAProxy (hairpin). If TierHive's NAT blocks that, SSO login fails even though browsers work; fallback is a CoreDNS rewrite to Traefik (which then needs matching TLS).
 
 Risks: TierHive decrypts all traffic and the hop to the node is plain HTTP; HAProxy is a single
 point of failure on a public alpha. Keep Immich registration closed and review Pocket ID's
@@ -273,7 +275,7 @@ cluster still tracks the feature branch.
 
 After the first reconcile:
 
-1. Create the Immich OIDC client in Pocket ID (`https://id.vps.powple.com`) and configure it in
+1. Create the Immich OIDC client in Pocket ID (`https://id.tierhive.powple.com`) and configure it in
    Immich (UI steps).
 2. Once `talosctl`/`kubectl` work over the tailnet (operator `tailscale-operator-tierhive`,
    Talos API `talos-api-tierhive`, see [`tailscale.md`](tailscale.md)), remove the public

@@ -27,7 +27,7 @@ Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and 
 | Storage engine | `local-path` (one node; replicated engines add nothing) |
 | API exposure | Talos API (50000) and Kubernetes API (6443) are **closed to the internet** by the EuroNodes console firewall and reached over Tailscale only (see _Reaching the cluster_). Only 80 and 443 are open. |
 | Ingress | Traefik terminates TLS on the node (hostPort 80/443); cert-manager, one Let's Encrypt certificate per host over HTTP-01 |
-| Domain | `*.euronodes.powple.com` (placeholder: hosts live in `apps/euronodes/*`, change them there) |
+| Domain | `*.vps.powple.com` (hosts live in `apps/euronodes/*`; see _Changing the public domain_ before changing it) |
 | Immich originals | `library` and `upload` on EuroNodes S3 through an rclone-crypt mount; everything else local |
 | Backups | restic to a Hetzner Storage Box, one repository per app |
 
@@ -175,11 +175,37 @@ regenerate with `--force`, apply; no reboot).
 
 ## DNS and TLS
 
-One wildcard record at the DNS provider: `*.euronodes.powple.com  A  178.159.34.177`. Traefik serves
+One wildcard record at the DNS provider: `*.vps.powple.com  A  178.159.34.177`. Traefik serves
 TLS on 443 and redirects 80 to 443. Each ingress asks cert-manager for its own certificate with the
 `letsencrypt-prod` `ClusterIssuer` (HTTP-01). Hostnames therefore appear in public Certificate
 Transparency logs. Use `letsencrypt-staging` while debugging (production rate limits). The issuers
 carry no ACME email.
+
+## Changing the public domain
+
+The hostnames are Pocket ID's identity: **passkeys are tied to the hostname** (`id.<domain>`) and Immich's sign-in
+is configured with the issuer address and callback URLs. Changing the domain therefore needs these steps, in this
+order (the live cluster went from `*.euronodes.powple.com` to `*.vps.powple.com` this way):
+
+1. **DNS first.** Point the new wildcard (`*.<domain>  A  178.159.34.177`) at the VM and check it with `dig +short id.<domain>`.
+   Certificates for the new names cannot be issued until it resolves. Keep the old record until the end.
+2. **Check the last Pocket ID backup** is recent (`backup-restore.md`).
+3. **Change the three files** and merge: `apps/euronodes/pocket-id/ingress.yaml` (host and TLS host),
+   `apps/euronodes/pocket-id/app-url-patch.yaml` (`APP_URL`), `apps/euronodes/immich/helmrelease-patch.yaml` (host and TLS host).
+   cert-manager issues the new certificates within about a minute (`kubectl get certificate -A`; until then the old
+   certificate is shown for the new name).
+4. **Pocket ID passkeys stop working** on the new hostname. Do not panic: generate a one-time sign-in link for each
+   user and register a new passkey (ideally two devices) from it:
+   ```sh
+   kubectl -n identity exec deploy/pocket-id -- /app/pocket-id one-time-access-token <username-or-email>
+   ```
+   The usernames are listed in Pocket ID's admin UI. Open the printed link on `https://id.<domain>`.
+5. **Pocket ID → OIDC clients → Immich:** change the two `https://immich.<old>/…` callback URLs to the new host
+   (`/auth/login` and `/user-settings`). The app callback `app.immich:///oauth-callback` does not change.
+6. **Immich → Administration → Settings → Authentication → OAuth:** set the issuer URL to `https://id.<domain>`. Until
+   you do, "Login with OAuth" fails; the normal password login still works as a fallback.
+7. **Phones:** in the Immich app change the server URL to `https://immich.<domain>` and sign in again.
+8. When everything works, remove the old DNS record.
 
 ## Immich storage
 

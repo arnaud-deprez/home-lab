@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: id.vps.powple.com
+    - host: id.tierhive.powple.com
       http:
         paths:
           - path: /

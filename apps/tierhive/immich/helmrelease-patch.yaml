@@ -13,7 +13,7 @@ spec:
           annotations:
             traefik.ingress.kubernetes.io/router.entrypoints: web
           hosts:
-            - host: immich.vps.powple.com
+            - host: immich.tierhive.powple.com
               paths:
                 - path: "/"
                   service:

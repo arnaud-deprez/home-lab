@@ -30,8 +30,8 @@ clusters/{laptop,tierhive,euronodes}/    one Flux entrypoint per cluster; same f
 infrastructure/
   controllers/{base,laptop,tierhive,euronodes}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
   configs/{base,laptop,tierhive,euronodes}       cluster config (local-path-provisioner, private CA issuer)
-apps/{base,laptop,tierhive,euronodes}            workloads (Immich, Pocket ID OIDC provider — id.home.arpa / id.vps.powple.com /
-                                       id.euronodes.powple.com;
+apps/{base,laptop,tierhive,euronodes}            workloads (Immich, Pocket ID OIDC provider — id.home.arpa / id.tierhive.powple.com /
+                                       id.vps.powple.com (euronodes);
                                        Pocket ID lives in the `identity` namespace)
 ```
 
