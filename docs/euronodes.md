@@ -207,6 +207,12 @@ order (the live cluster went from `*.euronodes.powple.com` to `*.vps.powple.com`
 7. **Phones:** in the Immich app change the server URL to `https://immich.<domain>` and sign in again.
 8. When everything works, remove the old DNS record.
 
+Two things that bit during the first switch: a **stale DNS cache** (a laptop or phone kept the old address for a
+name that used to point elsewhere, so it reached the wrong server: a 404 from a different nginx and a certificate
+that did not match). `dig` bypasses the OS cache, so test with a normal request, and flush the cache
+(`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder` on macOS) or wait out the old record's TTL. And
+the one-time sign-in links last **one hour**: generate each user's link when they are at their device.
+
 ## Immich storage
 
 | Data | Where |
