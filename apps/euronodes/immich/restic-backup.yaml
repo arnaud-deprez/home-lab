@@ -1,0 +1,97 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-backup
+  namespace: immich
+spec:
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 43200
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - name: wait-mount
+              image: busybox:1.37
+              command: [sh, -c, "test -f /mnt/rclone/.mounted"]
+              volumeMounts:
+                - name: rclone
+                  mountPath: /mnt/rclone
+                  mountPropagation: HostToContainer
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  SFTP_CMD="ssh -p 23 -i /ssh/ssh-privatekey -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=4 u695423@u695423.your-storagebox.de -s sftp"
+                  r() { restic -o "sftp.command=$SFTP_CMD" "$@"; }
+                  # create the repository only when restic says it does not exist (exit 10); any other
+                  # failure (network, wrong password 12, lock 11) fails the job and is never "fixed" by init
+                  rc=0
+                  r cat config >/dev/null || rc=$?
+                  if [ "$rc" -eq 10 ]; then
+                    echo "NOTICE: repository $RESTIC_REPOSITORY does not exist: creating it"
+                    r init
+                  elif [ "$rc" -ne 0 ]; then
+                    echo "cannot open the repository (restic exit code $rc): not creating anything"
+                    exit "$rc"
+                  fi
+                  stale=no
+                  if ! find /immich/backups -name '*.sql.gz' -mmin -1560 | grep -q .; then
+                    echo "WARNING: no Immich database dump newer than 26h in /immich/backups"
+                    stale=yes
+                  fi
+                  r backup --host immich --tag immich --ignore-inode \
+                    /mnt/rclone/library /mnt/rclone/upload \
+                    /immich/profile /immich/backups
+                  r forget --host immich --tag immich --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 6
+                  r check --read-data-subset=5%
+                  if [ "$stale" = yes ]; then
+                    echo "failing the job: Immich's newest database dump is stale (the backup above did run)"
+                    exit 1
+                  fi
+              envFrom:
+                - secretRef:
+                    name: restic-secrets
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+              volumeMounts:
+                - name: rclone
+                  mountPath: /mnt/rclone
+                  mountPropagation: HostToContainer
+                  readOnly: true
+                - name: immich
+                  mountPath: /immich
+                  readOnly: true
+                - name: ssh
+                  mountPath: /ssh
+                  readOnly: true
+          volumes:
+            - name: rclone
+              hostPath:
+                path: /var/mnt/rclone
+                type: Directory
+            - name: immich
+              persistentVolumeClaim:
+                claimName: immich-library-pvc
+            - name: ssh
+              secret:
+                secretName: restic-secrets
+                defaultMode: 0400
+                items:
+                  - key: ssh-privatekey
+                    path: ssh-privatekey
+                  - key: known_hosts
+                    path: known_hosts

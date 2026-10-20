@@ -1,0 +1,68 @@
+# Interactive restic shell for the Immich repository (restic-immich). NOT applied by Flux.
+# Apply it only while restoring, delete it afterwards. See docs/backup-restore.md.
+#
+#   kubectl apply -f docs/restore/restic-shell-immich.yaml
+#   kubectl -n immich exec -it restic-shell -- sh
+#   r snapshots                       # `r` is restic wired to the Storage Box
+#
+# Mounts mirror the nightly job: the S3 mount at /mnt/rclone, Immich's local volume at /immich,
+# and a scratch folder at /restore.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restic-shell
+  namespace: immich
+spec:
+  restartPolicy: Never
+  containers:
+    - name: restic
+      image: restic/restic:0.19.1
+      command:
+        - sh
+        - -c
+        - |
+          cat > /usr/local/bin/r <<'SCRIPT'
+          #!/bin/sh
+          exec restic -o "sftp.command=ssh -p 23 -i /ssh/ssh-privatekey -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=4 u695423@u695423.your-storagebox.de -s sftp" "$@"
+          SCRIPT
+          chmod +x /usr/local/bin/r
+          exec sleep infinity
+      envFrom:
+        - secretRef:
+            name: restic-secrets
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 1Gi
+      volumeMounts:
+        - name: restore
+          mountPath: /restore
+        - name: ssh
+          mountPath: /ssh
+          readOnly: true
+        - name: rclone
+          mountPath: /mnt/rclone
+          mountPropagation: HostToContainer
+        - name: immich
+          mountPath: /immich
+  volumes:
+    - name: restore
+      emptyDir: {}
+    - name: ssh
+      secret:
+        secretName: restic-secrets
+        defaultMode: 0400
+        items:
+          - key: ssh-privatekey
+            path: ssh-privatekey
+          - key: known_hosts
+            path: known_hosts
+    - name: rclone
+      hostPath:
+        path: /var/mnt/rclone
+        type: Directory
+    - name: immich
+      persistentVolumeClaim:
+        claimName: immich-library-pvc

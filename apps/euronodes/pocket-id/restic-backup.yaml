@@ -1,0 +1,91 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pocket-id-backup
+  namespace: identity
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - name: dump
+              image: ghcr.io/cloudnative-pg/postgresql:18-standard-trixie
+              command:
+                - sh
+                - -c
+                - pg_dump --format=custom --file=/dump/pocket-id.dump "$DB_URI"
+              env:
+                - name: DB_URI
+                  valueFrom:
+                    secretKeyRef:
+                      name: pocket-id-database-app
+                      key: uri
+              volumeMounts:
+                - name: dump
+                  mountPath: /dump
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  SFTP_CMD="ssh -p 23 -i /ssh/ssh-privatekey -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=4 u695423@u695423.your-storagebox.de -s sftp"
+                  r() { restic -o "sftp.command=$SFTP_CMD" "$@"; }
+                  # create the repository only when restic says it does not exist (exit 10); any other
+                  # failure (network, wrong password 12, lock 11) fails the job and is never "fixed" by init
+                  rc=0
+                  r cat config >/dev/null || rc=$?
+                  if [ "$rc" -eq 10 ]; then
+                    echo "NOTICE: repository $RESTIC_REPOSITORY does not exist: creating it"
+                    r init
+                  elif [ "$rc" -ne 0 ]; then
+                    echo "cannot open the repository (restic exit code $rc): not creating anything"
+                    exit "$rc"
+                  fi
+                  r backup --host pocket-id --tag pocket-id /data /dump
+                  r forget --host pocket-id --tag pocket-id --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 6
+                  r check
+              envFrom:
+                - secretRef:
+                    name: restic-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: dump
+                  mountPath: /dump
+                  readOnly: true
+                - name: ssh
+                  mountPath: /ssh
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: pocket-id-data
+            - name: dump
+              emptyDir: {}
+            - name: ssh
+              secret:
+                secretName: restic-secrets
+                defaultMode: 0400
+                items:
+                  - key: ssh-privatekey
+                    path: ssh-privatekey
+                  - key: known_hosts
+                    path: known_hosts

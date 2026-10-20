@@ -1,0 +1,80 @@
+# Interactive shells for the Pocket ID repository (restic-pocket-id). NOT applied by Flux.
+# Apply it only while restoring, delete it afterwards. See docs/backup-restore.md.
+#
+#   kubectl apply -f docs/restore/restic-shell-pocket-id.yaml
+#   kubectl -n identity exec -it restic-shell -c restic -- sh      # restic, `r snapshots`
+#   kubectl -n identity exec -it restic-shell -c postgres -- sh    # pg_restore / psql, $DB_URI is set
+#
+# Both containers share /restore. The restic container also mounts Pocket ID's data volume at /data.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restic-shell
+  namespace: identity
+spec:
+  restartPolicy: Never
+  containers:
+    - name: restic
+      image: restic/restic:0.19.1
+      command:
+        - sh
+        - -c
+        - |
+          cat > /usr/local/bin/r <<'SCRIPT'
+          #!/bin/sh
+          exec restic -o "sftp.command=ssh -p 23 -i /ssh/ssh-privatekey -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=4 u695423@u695423.your-storagebox.de -s sftp" "$@"
+          SCRIPT
+          chmod +x /usr/local/bin/r
+          exec sleep infinity
+      envFrom:
+        - secretRef:
+            name: restic-secrets
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 512Mi
+      volumeMounts:
+        - name: restore
+          mountPath: /restore
+        - name: ssh
+          mountPath: /ssh
+          readOnly: true
+        - name: data
+          mountPath: /data
+    - name: postgres
+      image: ghcr.io/cloudnative-pg/postgresql:18-standard-trixie
+      command: ["sleep", "infinity"]
+      env:
+        - name: PATH
+          value: /usr/lib/postgresql/18/bin:/usr/local/bin:/usr/bin:/bin
+        - name: DB_URI
+          valueFrom:
+            secretKeyRef:
+              name: pocket-id-database-app
+              key: uri
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 512Mi
+      volumeMounts:
+        - name: restore
+          mountPath: /restore
+  volumes:
+    - name: restore
+      emptyDir: {}
+    - name: ssh
+      secret:
+        secretName: restic-secrets
+        defaultMode: 0400
+        items:
+          - key: ssh-privatekey
+            path: ssh-privatekey
+          - key: known_hosts
+            path: known_hosts
+    - name: data
+      persistentVolumeClaim:
+        claimName: pocket-id-data

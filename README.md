@@ -2,8 +2,9 @@
 
 Home lab on a single-node [Talos](https://www.talos.dev/) cluster,
 GitOps-managed by [Flux](https://fluxcd.io/): Flux watches `main` and
-reconciles `clusters/laptop/` onto the laptop cluster and `clusters/tierhive/` onto
-a second single-node cluster on a [TierHive](docs/tierhive.md) VPS.
+reconciles `clusters/laptop/` onto the laptop cluster, `clusters/tierhive/` onto
+a second single-node cluster on a [TierHive](docs/tierhive.md) VPS and `clusters/euronodes/`
+onto a third one on a [EuroNodes](docs/euronodes.md) VPS.
 
 | Component                  | Status | Where                                                                                                                                                                                                                                                                                       |
 | -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -19,6 +20,8 @@ a second single-node cluster on a [TierHive](docs/tierhive.md) VPS.
 - **HTTPS / TLS trust setup**: [`docs/tls.md`](docs/tls.md)
 - **Tailscale remote admin access**: [`docs/tailscale.md`](docs/tailscale.md)
 - **Second cluster on TierHive (Talos install)**: [`docs/tierhive.md`](docs/tierhive.md)
+- **Third cluster on EuroNodes (Talos, S3 originals, backups, restore)**: [`docs/euronodes.md`](docs/euronodes.md)
+- **EuroNodes backups and restore (restic)**: [`docs/backup-restore.md`](docs/backup-restore.md)
 - **Bootstrapping a cluster**: [`flux-bootstrap/README.md`](flux-bootstrap/README.md)
 
 Immich is at `https://immich.home.arpa/`, Pocket ID (SSO) at
@@ -32,8 +35,10 @@ HTTP to HTTPS). The cert is signed by an in-cluster private CA — see
 ```
 talos/laptop/      Talos config for the laptop cluster: patch + SOPS-encrypted secrets bundle
 talos/tierhive/    same for the TierHive VPS (generated configs/kubeconfig are git-ignored)
+talos/euronodes/   same for the EuroNodes VPS
 clusters/laptop/   Flux entrypoint — Kustomizations, ordering, SOPS decryption patch
 clusters/tierhive/ same for the TierHive VPS (TLS via managed HAProxy, no cert-manager)
+clusters/euronodes/ same for the EuroNodes VPS (Traefik + Let's Encrypt, encrypted disks, restic backups)
 infrastructure/
   controllers/     operators & ingress (CloudNativePG, Traefik, cert-manager)   — reconciled first
   configs/         cluster config (local-path-provisioner, private CA issuer)
@@ -41,7 +46,7 @@ apps/              workloads (Immich, Pocket ID OIDC provider)
 ```
 
 Each of `infrastructure/*` and `apps/` has `base/` (reusable) +
-per-cluster Kustomize overlays (`laptop/`, `tierhive/`). Secrets that differ per cluster
+per-cluster Kustomize overlays (`laptop/`, `tierhive/`, `euronodes/`). Secrets that differ per cluster
 live in that cluster's overlay, encrypted with that cluster's own age key.
 
 ## Design notes

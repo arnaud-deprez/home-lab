@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/immich
+  - rclone-secret.sops.yaml
+  - rclone-mount.yaml
+  - restic-secret.sops.yaml
+  - restic-backup.yaml
+patches:
+  - path: helmrelease-patch.yaml
+    target:
+      kind: HelmRelease
+      name: immich
+  - path: library-pvc-patch.yaml
+    target:
+      kind: PersistentVolumeClaim
+      name: immich-library-pvc
+  - path: namespace-patch.yaml
+    target:
+      kind: Namespace
+      name: immich

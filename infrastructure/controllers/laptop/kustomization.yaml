@@ -12,3 +12,11 @@ patches:
     target:
       kind: HelmRelease
       name: traefik
+  - path: tailscale-patch.yaml
+    target:
+      kind: HelmRelease
+      name: tailscale-operator
+  - path: talos-api-service-patch.yaml
+    target:
+      kind: Service
+      name: talos-api

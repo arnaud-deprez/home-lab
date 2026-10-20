@@ -1,0 +1,162 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rclone-mount
+  namespace: immich
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rclone-mount-restart-immich
+  namespace: immich
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["immich-server"]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rclone-mount-restart-immich
+  namespace: immich
+subjects:
+  - kind: ServiceAccount
+    name: rclone-mount
+    namespace: immich
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rclone-mount-restart-immich
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rclone-cache
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rclone-mount
+  namespace: immich
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: rclone-mount
+  template:
+    metadata:
+      labels:
+        app: rclone-mount
+    spec:
+      serviceAccountName: rclone-mount
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: rclone
+          image: rclone/rclone:1.75.2
+          args:
+            - mount
+            - "crypt:"
+            - /mnt/rclone
+            - --allow-other
+            - --allow-non-empty
+            - --vfs-cache-mode=writes
+            - --cache-dir=/cache
+            - --vfs-cache-max-size=15G
+            - --vfs-write-back=5s
+            - --dir-cache-time=1m
+            - --umask=022
+          envFrom:
+            - secretRef:
+                name: rclone-config
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: mount
+              mountPath: /mnt/rclone
+              mountPropagation: Bidirectional
+            - name: cache
+              mountPath: /cache
+            - name: fuse
+              mountPath: /dev/fuse
+        - name: restart-immich-on-remount
+          image: curlimages/curl:8.23.0
+          command:
+            - sh
+            - -c
+            - |
+              # Immich binds subfolders of the FUSE mount; after rclone remounts it keeps a
+              # dead mount until restarted. A new mount shows up as a new device number.
+              api=https://kubernetes.default.svc/apis/apps/v1/namespaces/immich/deployments/immich-server
+              sa=/var/run/secrets/kubernetes.io/serviceaccount
+              last=""
+              while true; do
+                cur=""
+                if [ -f /mnt/rclone/.mounted ]; then cur=$(stat -c %d /mnt/rclone 2>/dev/null); fi
+                if [ -n "$cur" ] && [ "$cur" != "$last" ]; then
+                  echo "rclone mount is device $cur (was ${last:-none}): restarting immich-server"
+                  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                  if curl -sS --fail --cacert $sa/ca.crt -H "Authorization: Bearer $(cat $sa/token)" \
+                    -X PATCH -H 'Content-Type: application/strategic-merge-patch+json' \
+                    -d "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"$ts\"}}}}}" \
+                    $api >/dev/null; then
+                    last=$cur
+                  else
+                    echo "restart request failed, will retry"
+                  fi
+                fi
+                sleep 5
+              done
+          volumeMounts:
+            - name: mount
+              mountPath: /mnt/rclone
+              mountPropagation: HostToContainer
+            - name: kube-api
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+      volumes:
+        - name: kube-api
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+        - name: mount
+          hostPath:
+            path: /var/mnt/rclone
+            type: DirectoryOrCreate
+        - name: cache
+          persistentVolumeClaim:
+            claimName: rclone-cache
+        - name: fuse
+          hostPath:
+            path: /dev/fuse
+            type: CharDevice

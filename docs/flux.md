@@ -3,7 +3,8 @@
 This cluster is GitOps-managed by [Flux](https://fluxcd.io/). Flux watches
 `main` and reconciles `clusters/laptop/` onto the laptop cluster every 10 minutes.
 The TierHive VPS cluster uses the same layout under `clusters/tierhive/` (see
-[`tierhive.md`](tierhive.md)); replace `laptop` by `tierhive` in the paths below.
+[`tierhive.md`](tierhive.md)) and the EuroNodes VPS cluster under `clusters/euronodes/` (see
+[`euronodes.md`](euronodes.md)); replace `laptop` by `tierhive` or `euronodes` in the paths below.
 Full docs: <https://fluxcd.io/flux/>.
 
 ## Prerequisites
@@ -11,7 +12,7 @@ Full docs: <https://fluxcd.io/flux/>.
 - `flux`, `kubectl`, `sops`, `age` — `brew install fluxcd/tap/flux sops age`
 - `export KUBECONFIG="$PWD/talos/laptop/kubeconfig"`
 - the age private key of the cluster you work on (laptop: `~/.config/sops/age/home-lab.agekey`,
-  tierhive: `~/.config/sops/age/tierhive.agekey`), restored from the password manager — see
+  tierhive: `~/.config/sops/age/tierhive.agekey`, euronodes: `~/.config/sops/age/euronodes.agekey`), restored from the password manager — see
   [Age keys](#age-keys-one-per-cluster)
 
 ## Layout
@@ -23,12 +24,12 @@ clusters/laptop/
   infrastructure.yaml   # Flux Kustomizations: infra-controllers -> infra-configs
   apps.yaml             # Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
-  controllers/{base,laptop,tierhive}   # operators, ingress   (reconciled first)
-  configs/{base,laptop,tierhive}       # storage classes, cluster config
-apps/{base,laptop,tierhive}            # workloads (Immich, Pocket ID OIDC provider)
+  controllers/{base,laptop,tierhive,euronodes}   # operators, ingress   (reconciled first)
+  configs/{base,laptop,tierhive,euronodes}       # storage classes, cluster config
+apps/{base,laptop,tierhive,euronodes}            # workloads (Immich, Pocket ID OIDC provider)
 ```
 
-`base/` holds reusable definitions; `laptop/` and `tierhive/` are the per-cluster overlays
+`base/` holds reusable definitions; `laptop/`, `tierhive/` and `euronodes/` are the per-cluster overlays
 (Kustomize patches). Ordering: `controllers` -> `configs` -> `apps`, because operators/CRDs must exist before the
 resources that use them. Apps reconcile independently once `infra-configs` is ready.
 
@@ -138,7 +139,7 @@ git branch -D feat/x            # squash-merged branches aren't seen as merged
 Decryption is applied to every Flux Kustomization by the patch in
 `clusters/<cluster>/kustomization.yaml` — no per-app setup. `.sops.yaml` at the
 repo root holds the encryption rules and the age **public** keys: one key per cluster,
-selected by path (`*/tierhive/**` → tierhive key, `*/laptop/**` → laptop key). Talos secrets
+selected by path (`*/tierhive/**` → tierhive key, `*/euronodes/**` → euronodes key, `*/laptop/**` → laptop key). Talos secrets
 bundles (`talos/<cluster>/secrets.sops.yaml`) follow the same per-cluster keys but are encrypted
 as a whole file (no `encrypted_regex`) and are not applied by Flux. Secrets that
 differ per cluster live in that cluster's overlay, not in `base/`. To edit both clusters'
@@ -156,6 +157,7 @@ other's secrets.
 | ---------- | ------------------------------------ | ----------------------------------------- |
 | `laptop`   | `~/.config/sops/age/home-lab.agekey` | `*/laptop/**`, `talos/laptop/secrets*`    |
 | `tierhive` | `~/.config/sops/age/tierhive.agekey` | `*/tierhive/**`, `talos/tierhive/secrets*` |
+| `euronodes` | `~/.config/sops/age/euronodes.agekey` | `*/euronodes/**`, `talos/euronodes/secrets*` |
 
 - **Injected into Flux** as the `sops-age` Secret (key `age.agekey`) in the `flux-system`
   namespace of *that cluster* — same name everywhere, different content. The

@@ -5,31 +5,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A single-node [Talos](https://www.talos.dev/) Kubernetes home lab, GitOps-managed by
-[Flux](https://fluxcd.io/). Flux watches `main` and reconciles `clusters/laptop/` (and `clusters/tierhive/` for the TierHive VPS cluster) onto
+[Flux](https://fluxcd.io/). Flux watches `main` and reconciles `clusters/laptop/` (and `clusters/tierhive/`, `clusters/euronodes/` for the TierHive and EuroNodes VPS clusters) onto
 the cluster every 10 minutes. There is no application build/lint/test pipeline — this
 repo *is* the cluster's desired state, expressed as Kubernetes manifests, Kustomize
 overlays, and Flux `HelmRelease`/`Kustomization` objects.
 
 Full details live in [`docs/flux.md`](docs/flux.md) (day-to-day ops, secrets, branch
-workflow) and [`flux-bootstrap/README.md`](flux-bootstrap/README.md) (one-time cluster
-bootstrap). Read those before making non-trivial changes — this file only summarizes
+workflow), [`flux-bootstrap/README.md`](flux-bootstrap/README.md) (one-time cluster
+bootstrap) [`docs/euronodes.md`](docs/euronodes.md) (EuroNodes cluster: Talos, S3 storage) and
+[`docs/backup-restore.md`](docs/backup-restore.md) (its restic backups and how to restore). Read those before making non-trivial changes — this file only summarizes
 what's needed to navigate and validate.
 
 ## Layout and reconcile order
 
 ```
-talos/{laptop,tierhive}/       Talos OS config per cluster: patch + SOPS-encrypted secrets bundle
+talos/{laptop,tierhive,euronodes}/       Talos OS config per cluster: patch + SOPS-encrypted secrets bundle
                                (secrets.sops.yaml); generated configs/kubeconfig are git-ignored.
-                               Not applied by Flux — see README.md / docs/tierhive.md
-clusters/{laptop,tierhive}/    one Flux entrypoint per cluster; same file set:
+                               Not applied by Flux — see README.md / docs/tierhive.md / docs/euronodes.md
+clusters/{laptop,tierhive,euronodes}/    one Flux entrypoint per cluster; same file set:
   kustomization.yaml    entrypoint: resources + the SOPS decryption patch
   flux-system/           Flux's own manifests, managed by `flux bootstrap` — don't hand-edit
   infrastructure.yaml    Flux Kustomizations: infra-controllers -> infra-configs
   apps.yaml               Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
-  controllers/{base,laptop,tierhive}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
-  configs/{base,laptop,tierhive}       cluster config (local-path-provisioner, private CA issuer)
-apps/{base,laptop,tierhive}            workloads (Immich, Pocket ID OIDC provider — id.home.arpa / id.vps.powple.com;
+  controllers/{base,laptop,tierhive,euronodes}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
+  configs/{base,laptop,tierhive,euronodes}       cluster config (local-path-provisioner, private CA issuer)
+apps/{base,laptop,tierhive,euronodes}            workloads (Immich, Pocket ID OIDC provider — id.home.arpa / id.vps.powple.com /
+                                       id.euronodes.powple.com;
                                        Pocket ID lives in the `identity` namespace)
 ```
 
@@ -40,15 +42,19 @@ their own OIDC client against it), so there's no ordering between them. If somet
 needs Pocket ID up first, split `apps` into per-app Kustomizations with `dependsOn`.
 
 Every `infrastructure/*` and `apps/` component has `base/` (reusable manifests) +
-per-cluster overlays (`laptop/`, `tierhive/`; Kustomize patches). A new cluster reuses
+per-cluster overlays (`laptop/`, `tierhive/`, `euronodes/`; Kustomize patches). A new cluster reuses
 `base/` and only overlays what differs (host, storage class, ingress exposure). The tierhive
 cluster differs notably: TLS is terminated by TierHive's managed HAProxy (plain HTTP to
-Traefik, no redirect, no cert-manager) — see `docs/tierhive.md`.
+Traefik, no redirect, no cert-manager) — see `docs/tierhive.md`. The euronodes cluster has a public IPv4, so Traefik
+terminates TLS itself (cert-manager, Let's Encrypt HTTP-01), disks are LUKS-encrypted, Immich originals live on an
+rclone-crypt S3 mount and both apps are backed up with restic — see `docs/euronodes.md`.
 
 **Design conventions to preserve when adding a component:**
 - One Flux `HelmRelease` / `Kustomization` per component, not an umbrella chart.
   Order dependencies via `dependsOn`.
 - Traefik (hostPort DaemonSet), not ingress-nginx.
+- Every cluster runs the Tailscale operator for remote admin access (`docs/tailscale.md`); its OAuth secret,
+  tailnet hostnames and Talos API endpoint IP live in the cluster's `infrastructure/controllers/<cluster>/`.
 - Secrets are SOPS + age encrypted (`*.sops.yaml`); decryption is patched onto every
   Kustomization centrally from each cluster's `kustomization.yaml` — no per-app setup
   needed. Each cluster has its own age key (`.sops.yaml` selects by path); secrets that

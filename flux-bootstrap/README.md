@@ -1,11 +1,12 @@
 # Bootstrap
 
 One-time steps to bring a fresh cluster under Flux. The same steps apply to every cluster
-(`laptop`, `tierhive`, ...): only the variables below change.
+(`laptop`, `tierhive`, `euronodes`, ...): only the variables below change.
 
 The Talos cluster must already be installed and bootstrapped, with its kubeconfig in
 `talos/<cluster>/kubeconfig`: see the Talos section of [`../README.md`](../README.md)
-(laptop / UTM) or [`../docs/tierhive.md`](../docs/tierhive.md) (TierHive).
+(laptop / UTM), [`../docs/tierhive.md`](../docs/tierhive.md) (TierHive) or
+[`../docs/euronodes.md`](../docs/euronodes.md) (EuroNodes).
 
 ## Age keys
 
@@ -18,6 +19,7 @@ by path), the private key is stored in your password manager, in
 | ---------- | ------------------------------------ | ----------------- | ------------------------------------------ |
 | `laptop`   | `~/.config/sops/age/home-lab.agekey` | `sops-age`        | `*/laptop/**`, `talos/laptop/secrets*`     |
 | `tierhive` | `~/.config/sops/age/tierhive.agekey` | `sops-age`        | `*/tierhive/**`, `talos/tierhive/secrets*` |
+| `euronodes` | `~/.config/sops/age/euronodes.agekey` | `sops-age`       | `*/euronodes/**`, `talos/euronodes/secrets*` |
 
 For a **new** cluster, create its key first and add a rule for it (see
 [`../docs/flux.md`](../docs/flux.md#age-keys-one-per-cluster)).
@@ -30,7 +32,7 @@ For a **new** cluster, create its key first and add a rule for it (see
 ## Steps
 
 ```sh
-export CLUSTER=laptop                                   # or tierhive
+export CLUSTER=laptop                                   # or tierhive, euronodes
 export AGE_KEY=$HOME/.config/sops/age/$CLUSTER.agekey
 export KUBECONFIG="$PWD/talos/$CLUSTER/kubeconfig"
 export GITHUB_TOKEN=...    # fine-grained PAT, Contents + Administration RW

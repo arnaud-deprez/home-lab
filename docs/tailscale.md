@@ -1,7 +1,8 @@
 # Tailscale — remote admin access
 
-The Tailscale Kubernetes operator (`infrastructure/controllers/base/tailscale-operator/`)
-gives whitelisted tailnet identities remote access to two things, without
+Every cluster in this repo runs the Tailscale Kubernetes operator
+(`infrastructure/controllers/base/tailscale-operator/`, included by each cluster's controllers overlay).
+It gives whitelisted tailnet identities remote access to two things, without
 exposing either publicly:
 
 - The **Kubernetes API server**, via the operator's built-in in-process
@@ -48,7 +49,7 @@ admin console — there's no Flux-reconciled resource for them.
    entry makes the grants above meaningless (every device can reach
    everything). Delete it, or narrow it, before relying on the grants as
    an actual boundary. Confirm with a negative test: from a second
-   identity/device not in the `src` list, `tailscale ping talos-api`
+   identity/device not in the `src` list, `tailscale ping talos-api-<cluster>`
    should fail. Alternatively, add policy `tests` — the admin console
    refuses to save a policy that fails its own tests:
    ```json
@@ -63,7 +64,7 @@ admin console — there's no Flux-reconciled resource for them.
    scoped to `tag:k8s-operator`. Copy the client ID/secret (shown once).
 6. **Encrypt the OAuth credentials**:
    ```sh
-   sops infrastructure/controllers/<cluster>/operator-oauth.sops.yaml   # laptop or tierhive
+   sops infrastructure/controllers/<cluster>/operator-oauth.sops.yaml
    ```
    Each cluster has its own secret (and its own OAuth client) in its overlay, encrypted to
    that cluster's age key, and the file must be listed in that overlay's `kustomization.yaml`.
@@ -78,7 +79,7 @@ admin console — there's no Flux-reconciled resource for them.
 
 ```sh
 # Kubernetes API, over the tailnet — impersonates your tailnet identity
-tailscale configure kubeconfig tailscale-operator
+tailscale configure kubeconfig <operator-hostname>      # the cluster's operatorConfig.hostname
 kubectl get nodes
 ```
 
@@ -86,9 +87,9 @@ The first request after the proxy (re)starts provisions its TLS cert on
 demand and can time out — just retry once.
 
 ```sh
-# Talos API — use the tailnet address shown for the talos-api Service
+# Talos API — use the tailnet address shown for the cluster's talos-api Service
 kubectl get service talos-api -n tailscale-operator   # EXTERNAL-IP / MagicDNS name
-talosctl -e <talos-api-tailnet-address> -n 192.168.64.5 version   # tierhive: -n 10.10.8.2
+talosctl -e <talos-api-tailnet-address> -n <node-ip> version       # <node-ip>: the address in that cluster's talos-api-endpoints.yaml
 ```
 
 RBAC for the impersonated identity is a normal `ClusterRoleBinding`
@@ -109,13 +110,22 @@ RBAC for the impersonated identity is a normal `ClusterRoleBinding`
   namespace `pod-security.kubernetes.io/enforce: privileged` — same fix
   already applied to `infrastructure/controllers/base/traefik/namespace.yaml`
   for its hostPort DaemonSet, same underlying reason.
-- **The Talos API `Endpoints` IP is not kept in sync by anything.** It's
-  hardcoded in `infrastructure/controllers/laptop/talos-api-endpoints.yaml`
-  (`192.168.64.5`, matching the node's kubeconfig server address). If the
-  node's address ever changes, update it there by hand. The tierhive cluster has its own
-  file (`infrastructure/controllers/tierhive/talos-api-endpoints.yaml`, `10.10.8.2`) and uses the
-  names `tailscale-operator-tierhive` / `talos-api-tierhive` (`tailscale configure kubeconfig
-  tailscale-operator-tierhive`).
+- **The Talos API `Endpoints` IP is not kept in sync by anything.** Each cluster's
+  `infrastructure/controllers/<cluster>/talos-api-endpoints.yaml` hardcodes the node's address (the one
+  `talosctl` uses as `-n`). If the node's address ever changes, update it there by hand.
+- **`talosctl` over the tailnet fails with `x509: certificate is valid for …, not 100.x.x.x`** until the Talos API
+  certificate lists the tailnet address. Read the Service's address and name with `kubectl get service talos-api -n
+  tailscale-operator`, add both to the cluster's config (`talosctl gen config --force … --additional-sans
+  <node-ip>,<tailnet-ip>,<magicdns-name>`, then `apply-config` with the patch; no reboot). Use the MagicDNS name
+  as the endpoint: the Service's tailnet IP can change if the Service is recreated.
+- **Tailnet names must be unique per cluster**, or two clusters fight over one device name. Each cluster's
+  overlay sets `operatorConfig.hostname` (in `tailscale-patch.yaml`) and the Talos API Service's
+  `tailscale.com/hostname` (in `talos-api-service-patch.yaml`); use `tailscale configure kubeconfig
+  <that operator hostname>` to reach the matching cluster. The tags (`tag:k8s-operator`, `tag:talos-api`) and
+  the ACL grants are shared by all clusters.
+- **A cluster's `operator-oauth.sops.yaml` must hold real credentials before it is pushed.** With the
+  placeholder values the operator never starts, `infra-controllers` (`wait: true`) never turns Ready, and
+  the `apps` Kustomization stops reconciling (workloads already running keep running).
 
 ## Explicitly out of scope
 
