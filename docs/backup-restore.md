@@ -187,10 +187,15 @@ and was tested end to end on 2026-10-26.
    `r restore latest --tag immich --target / --exclude-xattr security.selinux --include '/immich/backups'`.
    Pick the newest `immich-db-backup-*` that predates the problem.
 3. **Replay it as the PostgreSQL superuser.** The database is `app` in the CloudNativePG cluster `immich-database`.
-   Streaming from the shell pod keeps Immich down; the dump is read from the shell's `/immich/backups`:
+   Do it in **two separate steps**: copy the dump to your laptop, then replay the local file. Do not pipe one
+   `kubectl exec` into another: through the Tailscale API proxy such a double-hop stream is cut short (it failed twice
+   on 2026-10-26 with `websocket: close 1006`, then `missing data for column` / `invalid hexadecimal data`, always rolled
+   back).
    ```sh
    kubectl apply -f docs/restore/restic-shell-immich.yaml        # if the shell is not running
-   kubectl -n immich exec restic-shell -- gzip -dc /immich/backups/<dump>.sql.gz \
+   kubectl -n immich exec restic-shell -- cat /immich/backups/<dump>.sql.gz > dump.sql.gz
+   gzip -t dump.sql.gz                                           # must print nothing; compare the size with the original
+   gzip -dc dump.sql.gz \
     | sed "s/SELECT pg_catalog.set_config('search_path', '', false);/SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', true);/g" \
     | kubectl -n immich exec -i immich-database-1 -c postgres -- \
         psql --dbname=app --username=postgres --single-transaction --set ON_ERROR_STOP=on
@@ -198,13 +203,18 @@ and was tested end to end on 2026-10-26.
    Expect exit code 0 and no `ERROR` lines (about a thousand lines of normal output). Run as the superuser, objects keep
    their owner `app` because the dump contains the `OWNER TO app` statements. Check:
    `kubectl -n immich exec immich-database-1 -c postgres -- psql -U postgres -d app -c "select count(*) from asset"`.
-   Any error rolls everything back; fix the cause and run it again.
+   Any error rolls everything back, so a failed attempt is safe to repeat. Delete `dump.sql.gz` afterwards: it holds
+   user e-mail addresses and password hashes.
 4. **Scale Immich up** (`--replicas=1`, `flux resume helmrelease immich -n immich`) and check your photos in the app.
-5. **Regenerate the derived data.** Thumbnails and encoded video are not in the backup, and the restored database still
-   records their paths, so the job's default "missing only" mode finds nothing to do and every thumbnail is a 404. Run
-   the jobs for **all** assets: Administration → Jobs → Thumbnail generation → **All** (API:
-   `PUT /api/jobs/thumbnailGeneration` with `{"command":"start","force":true}`), then the same for encoded video, smart
-   search and faces. Resume the jobs and Flux (section 5, top).
+5. **Regenerate what is not in the database.** Only two things are missing after the restore: **thumbnails/previews** and
+   **encoded video**. They are not in the backup, and the restored database still records their paths, so the job's
+   default "missing only" mode finds nothing to do (thumbnails and playback return 404). Run those two jobs for **all**
+   assets: Administration → Jobs → Thumbnail generation → **All**, and Video conversion → **All** (API:
+   `PUT /api/jobs/thumbnailGeneration` and `PUT /api/jobs/videoConversion` with `{"command":"start","force":true}`).
+   **Smart search and detected faces need no rerun**: their data lives in the database and came back with it (tested:
+   searches worked immediately after the restore). With the default setting a web-compatible video has no encoded copy
+   at all and plays from the original, so only videos Immich had transcoded are affected. Resume the jobs and Flux
+   (section 5, top).
 
 ### 5.3 The Pocket ID database or data is lost
 
@@ -289,6 +299,7 @@ someone deleting the repository with the cluster's key.
 | Immich refuses to start after folders were replaced | Its folder check wants an `.immich` marker file in each storage folder. `library`, `upload`, `profile` and `backups` get theirs back with the restore; `thumbs` and `encoded-video` are not in the backup, so let Immich create them on a first start before restoring the database (5.5, step 6) or follow the fix on Immich's folder-check page |
 | Immich's maintenance screen: `permission denied to create extension "earthdistance"` | The in-app restore cannot work on this cluster (the app user is not a superuser). Nothing was changed; use the superuser restore in 5.2 |
 | After a database restore every photo is in the timeline but thumbnails are blank/404 | Thumbnails are not backed up, and the job's "missing only" mode trusts the restored database. Run the thumbnail job for **all** assets (5.2, step 5) |
+| `psql` ends with `missing data for column …` or `invalid hexadecimal data`, or `kubectl` prints `websocket: close 1006` | You piped one `kubectl exec` into another and the stream was truncated. Nothing was restored (single transaction). Copy the dump to a local file first, then replay it (5.2, step 3) |
 | CronJobs are active again although you paused them | Flux reset them. Pause with `flux suspend kustomization apps` first (section 5, top) |
 | Backup job runs for hours after a reboot | Normally avoided by `--ignore-inode`; check the job is the current manifest |
 
@@ -305,13 +316,21 @@ Result: Immich showed the same four photos with the **same asset IDs and usage**
 The test found three defects that are fixed in this guide: Immich's in-app restore cannot work here, the thumbnail job
 must be run for all assets, and a manual CronJob pause is undone by Flux.
 
+**Second run, with a real video (a 38 s, 8.7 MB MP4 with a face), same day:** Immich was set to transcode everything so
+an encoded copy existed, then the video was lost completely (database rows, face, search embedding, original, thumbnails,
+encoded copy). Recovery followed this guide with the pause, Immich scaled down, the original restored from restic into
+the S3 mount and the database replayed as the superuser. Immediately after the restore: the original was byte-identical,
+smart search found the video for every query, the detected face and the search data were in the database; thumbnails,
+preview and playback returned 404. After running only the thumbnail and video-conversion jobs for all assets everything
+was back, identical in size to before. It also showed that piping two `kubectl exec` streams fails (see the pitfalls).
+
 Earlier checks (2026-10-19 and 2026-10-20): the Immich repository restores the newest dumps (each passes `gzip -t`)
 and `profile`; Pocket ID's dump restored into a throwaway Postgres with identical row counts for every table the app
 uses, and its data folder restored; both restic shell pods start, list snapshots and restore files; the nightly jobs
 run on schedule at 03:30 and 04:00.
 
-**Not tested:** restoring the originals into a *new* S3 bucket; encoded-video, smart-search and face regeneration
-(the test images had none); rebuilding the whole cluster on a new VM from these steps; the Storage Box replacement.
+**Not tested:** restoring the originals into a *new* S3 bucket; grouping faces into named people (Immich needs at least
+three similar faces); rebuilding the whole cluster on a new VM from these steps; the Storage Box replacement.
 The Pocket ID restore into the live database (5.3) has been rehearsed only through the throwaway-Postgres drill.
 
 **Suggested habit:** once a month restore the newest Pocket ID dump and an Immich dump to your laptop (section 4A),
