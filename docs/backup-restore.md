@@ -143,18 +143,21 @@ The manifests are in [`restore/`](restore/); Flux does not apply them. They were
 ### Before any restore that follows a loss: pause the jobs
 
 A rebuilt cluster starts with empty databases. If the nightly jobs run, they back up that emptiness, and after
-7 days they delete the older restore points. So pause them first and resume only when everything is back:
+7 days they delete the older restore points. So pause them first and resume only when everything is back.
+**Pause Flux first**: it owns the CronJobs and resets a manual `suspend` on its next reconcile (seen within minutes
+of a new commit during the 2026-10-26 test), which would silently re-enable the backups.
 
 ```sh
+flux suspend kustomization apps
 kubectl -n immich patch cronjob restic-backup -p '{"spec":{"suspend":true}}'
 kubectl -n identity patch cronjob pocket-id-backup -p '{"spec":{"suspend":true}}'
 flux suspend helmrelease immich -n immich        # otherwise an Immich upgrade scales it back up mid-restore
 
 # ... restore ...
 
-kubectl -n immich patch cronjob restic-backup -p '{"spec":{"suspend":false}}'
-kubectl -n identity patch cronjob pocket-id-backup -p '{"spec":{"suspend":false}}'
 flux resume helmrelease immich -n immich
+flux resume kustomization apps                   # Flux puts the CronJobs back to active
+kubectl get cronjob -A                           # check SUSPEND is false
 kubectl -n immich create job --from=cronjob/restic-backup after-restore-1   # take a fresh backup
 ```
 
@@ -170,24 +173,38 @@ kubectl -n immich create job --from=cronjob/restic-backup after-restore-1   # ta
 
 ### 5.2 The Immich database is lost or damaged
 
-Immich 3 can restore its own database from the dump files:
+**Do not use Immich's in-app restore here** (Administration → Maintenance → Restore database backup). It replays the
+dump as the application's database user, which on this cluster is deliberately not a superuser, and the dump re-creates
+the extensions. It fails with `ERROR: permission denied to create extension "earthdistance"` /
+`Must be superuser to create this extension`. It runs in one transaction, so the database is left untouched and the
+attempt is harmless, but it cannot succeed. (Immich also writes `restore-point-immich-db-backup-*.sql.gz` copies of the
+database as it was before each attempt; they are not nightly dumps.) The superuser restore below is the supported path
+and was tested end to end on 2026-10-26.
 
-1. If Immich's volume is intact, its `backups` folder still holds the nightly dumps. If not, put them back first:
-   in the Immich shell, `r restore latest --tag immich --target /restore --exclude-xattr security.selinux --include /immich/backups`,
-   then `cp -a /restore/immich/backups/. /immich/backups/`.
-2. Open Immich → **Administration → Maintenance → Restore database backup**, pick the newest dump that predates the
-   problem, and confirm. (On a completely fresh install the welcome screen has **Restore from backup** instead.)
-3. Run the admin jobs that regenerate derived data: thumbnails, encoded video, smart search, faces.
-
-Fallback if the UI is unavailable (**not tested here**; the database is `app`, owned by `app`, in the CloudNativePG
-cluster `immich-database`; the target database must be empty). Run from your laptop, with the dump already unpacked
-there, after scaling Immich to 0:
-
-```sh
-gunzip --stdout immich-db-backup-<timestamp>-v3.2.0-pg18.6.sql.gz \
- | sed "s/SELECT pg_catalog.set_config('search_path', '', false);/SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', true);/g" \
- | kubectl -n immich exec -i immich-database-1 -c postgres -- psql --dbname=app --username=postgres --single-transaction --set ON_ERROR_STOP=on
-```
+1. **Pause the jobs and Flux** (section 5, top), and scale Immich down: `kubectl -n immich scale deploy/immich-server --replicas=0`.
+2. **Get the dump.** If Immich's local volume is intact, its `backups` folder holds the nightly dumps. If not, restore them
+   from restic into the volume with the Immich shell (section 4B):
+   `r restore latest --tag immich --target / --exclude-xattr security.selinux --include '/immich/backups'`.
+   Pick the newest `immich-db-backup-*` that predates the problem.
+3. **Replay it as the PostgreSQL superuser.** The database is `app` in the CloudNativePG cluster `immich-database`.
+   Streaming from the shell pod keeps Immich down; the dump is read from the shell's `/immich/backups`:
+   ```sh
+   kubectl apply -f docs/restore/restic-shell-immich.yaml        # if the shell is not running
+   kubectl -n immich exec restic-shell -- gzip -dc /immich/backups/<dump>.sql.gz \
+    | sed "s/SELECT pg_catalog.set_config('search_path', '', false);/SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', true);/g" \
+    | kubectl -n immich exec -i immich-database-1 -c postgres -- \
+        psql --dbname=app --username=postgres --single-transaction --set ON_ERROR_STOP=on
+   ```
+   Expect exit code 0 and no `ERROR` lines (about a thousand lines of normal output). Run as the superuser, objects keep
+   their owner `app` because the dump contains the `OWNER TO app` statements. Check:
+   `kubectl -n immich exec immich-database-1 -c postgres -- psql -U postgres -d app -c "select count(*) from asset"`.
+   Any error rolls everything back; fix the cause and run it again.
+4. **Scale Immich up** (`--replicas=1`, `flux resume helmrelease immich -n immich`) and check your photos in the app.
+5. **Regenerate the derived data.** Thumbnails and encoded video are not in the backup, and the restored database still
+   records their paths, so the job's default "missing only" mode finds nothing to do and every thumbnail is a 404. Run
+   the jobs for **all** assets: Administration → Jobs → Thumbnail generation → **All** (API:
+   `PUT /api/jobs/thumbnailGeneration` with `{"command":"start","force":true}`), then the same for encoded video, smart
+   search and faces. Resume the jobs and Flux (section 5, top).
 
 ### 5.3 The Pocket ID database or data is lost
 
@@ -243,8 +260,9 @@ Full order. Stop at any step that fails and fix it before moving on.
    cp -a /restore/immich/profile/. /immich/profile/
    cp -a /restore/immich/backups/. /immich/backups/
    ```
-6. Let Immich start once on its fresh database (so it creates its own folder markers), then do the in-app restore from
-   section 5.2 and run the regenerating admin jobs.
+6. Let Immich start once on its fresh database (so it creates its own folder markers), then scale it down and restore the
+   database as in section 5.2 (the superuser restore, **not** the in-app one), scale it up and run the regenerating admin
+   jobs for **all** assets.
 7. Resume the jobs and run a manual backup. Check `restic check` passes.
 
 Why this matters: Postgres cannot be restored while the app is writing to it, and the nightly jobs would overwrite good
@@ -269,23 +287,32 @@ someone deleting the repository with the cluster's key.
 | Restore ends with `Fatal: There were N errors` mentioning `security.selinux` | Add `--exclude-xattr security.selinux` (data is already restored) |
 | `ssh … UNPROTECTED PRIVATE KEY FILE` in a pod | Do not set `fsGroup` on pods that mount the key; Kubernetes then makes it group-readable |
 | Immich refuses to start after folders were replaced | Its folder check wants an `.immich` marker file in each storage folder. `library`, `upload`, `profile` and `backups` get theirs back with the restore; `thumbs` and `encoded-video` are not in the backup, so let Immich create them on a first start before restoring the database (5.5, step 6) or follow the fix on Immich's folder-check page |
+| Immich's maintenance screen: `permission denied to create extension "earthdistance"` | The in-app restore cannot work on this cluster (the app user is not a superuser). Nothing was changed; use the superuser restore in 5.2 |
+| After a database restore every photo is in the timeline but thumbnails are blank/404 | Thumbnails are not backed up, and the job's "missing only" mode trusts the restored database. Run the thumbnail job for **all** assets (5.2, step 5) |
+| CronJobs are active again although you paused them | Flux reset them. Pause with `flux suspend kustomization apps` first (section 5, top) |
 | Backup job runs for hours after a reboot | Normally avoided by `--ignore-inode`; check the job is the current manifest |
 
 ## 7. What has been tested
 
-A restore drill on the live cluster, and the shell pods, were tested on 2026-10-19 and 2026-10-20:
+**Full disaster-recovery test on the live cluster, 2026-10-26** (the library held only test data): four test photos
+(three 2.3 MB images and one 44 MB file) were uploaded, Immich's own database dump and the restic backup were taken and
+checked (the snapshot held all four originals with their exact sizes and the dump), then the loss was simulated: the
+photos were deleted in Immich (database records, originals on S3 and thumbnails gone) and the test dumps removed from
+Immich's backup folder. Recovery, using only restic: originals restored straight into the S3 mount (`--target /`), the
+dumps restored into Immich's volume, the database replayed as the PostgreSQL superuser, thumbnails regenerated.
+Result: Immich showed the same four photos with the **same asset IDs and usage**, every original downloaded
+**byte-identical** to its checksum from before the loss, and thumbnails came back after running the job for all assets.
+The test found three defects that are fixed in this guide: Immich's in-app restore cannot work here, the thumbnail job
+must be run for all assets, and a manual CronJob pause is undone by Flux.
 
-- The Immich repository restores the newest database dumps (each passes `gzip -t`) and `profile`; three files restored
-  from `upload/` had exactly the sizes of the live files, and restic verifies every block's hash while restoring.
-- The Pocket ID dump restored into a throwaway Postgres: every table the app depends on had the same row count as the
-  live database; its data folder restored too.
-- Both restic shell pods start, list snapshots and restore files.
-- The nightly jobs ran on schedule at 03:30 and 04:00.
+Earlier checks (2026-10-19 and 2026-10-20): the Immich repository restores the newest dumps (each passes `gzip -t`)
+and `profile`; Pocket ID's dump restored into a throwaway Postgres with identical row counts for every table the app
+uses, and its data folder restored; both restic shell pods start, list snapshots and restore files; the nightly jobs
+run on schedule at 03:30 and 04:00.
 
-**Not tested:** restoring an Immich database dump into a fresh Immich (the in-app restore or the command-line
-fallback); restoring the originals into a *new* S3 bucket; rebuilding the whole cluster on a new VM from these steps;
-the Storage Box replacement. Do at least the first one during a calm moment, because it is the step you would
-otherwise meet for the first time during an incident.
+**Not tested:** restoring the originals into a *new* S3 bucket; encoded-video, smart-search and face regeneration
+(the test images had none); rebuilding the whole cluster on a new VM from these steps; the Storage Box replacement.
+The Pocket ID restore into the live database (5.3) has been rehearsed only through the throwaway-Postgres drill.
 
 **Suggested habit:** once a month restore the newest Pocket ID dump and an Immich dump to your laptop (section 4A),
 check that the files open (`gunzip -t`, `pg_restore --list`), and look at the job history.
