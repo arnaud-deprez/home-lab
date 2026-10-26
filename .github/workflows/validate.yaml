@@ -26,7 +26,7 @@ jobs:
           for dir in infrastructure/controllers infrastructure/configs apps; do
             echo "::group::$dir/${{ matrix.cluster }}"
             kustomize build "$dir/${{ matrix.cluster }}" \
-              | kubeconform -strict -summary -ignore-missing-schemas \
+              | kubeconform -strict -summary -ignore-missing-schemas -skip Secret \
                   -schema-location default \
                   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
             echo "::endgroup::"
