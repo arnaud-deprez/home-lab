@@ -94,8 +94,26 @@ Once `flux diff` shows only what you intend: one commit, one push, one
 
 A PR check can render every overlay and schema-validate it with no cluster —
 `flux build` piped to [`kubeconform`](https://github.com/yannh/kubeconform).
-See the workflow in
+[`.github/workflows/validate.yaml`](../.github/workflows/validate.yaml) does this for every
+cluster on each PR (including Renovate's), based on
 [fluxcd/flux2-kustomize-helm-example](https://github.com/fluxcd/flux2-kustomize-helm-example/tree/main/.github/workflows).
+
+## Dependency updates (Renovate)
+
+[Renovate](https://docs.renovatebot.com/) (config: [`renovate.json`](../renovate.json)) opens a weekly PR
+for pinned versions: Helm/OCI chart versions, container images and the Talos installer image.
+Minor/patch bumps are grouped; majors wait for approval on the Dependency Dashboard issue;
+Immich and CloudNativePG are never grouped or automerged. `clusters/*/flux-system/` is ignored.
+
+Flow: check CI is green, read the release notes, merge — Flux deploys it.
+Renovate does **not** upgrade what Flux doesn't manage:
+
+- **Talos**: after merging a Talos bump, run `talosctl upgrade --image <new installer image>` per node
+  (laptop first); Kubernetes itself via `talosctl upgrade-k8s`.
+- **Flux**: see [Upgrade Flux](#upgrade-flux) below.
+- Before merging Immich/Postgres bumps on euronodes, take a restic backup ([`backup-restore.md`](backup-restore.md)).
+
+One-time setup: install the [Renovate GitHub App](https://github.com/apps/renovate) on this repository.
 
 ## Develop on a branch
 

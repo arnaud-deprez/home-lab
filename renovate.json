@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", "helpers:pinGitHubActionDigests", "schedule:weekly"],
+  "timezone": "Europe/Brussels",
+  "flux": {
+    "managerFilePatterns": ["/^(apps|infrastructure)/.+\\.ya?ml$/"]
+  },
+  "kubernetes": {
+    "managerFilePatterns": ["/^(apps|infrastructure)/.+\\.ya?ml$/"]
+  },
+  "ignorePaths": ["clusters/*/flux-system/**"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Talos installer image",
+      "managerFilePatterns": ["/^talos/.+/(controlplane|worker)\\.yaml$/"],
+      "matchStrings": ["factory\\.talos\\.dev/metal-installer/\\w+:(?<currentValue>v[\\d.]+)"],
+      "depNameTemplate": "siderolabs/talos",
+      "datasourceTemplate": "github-releases"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["flux", "kubernetes"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "minor and patch updates"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Stateful or migration-heavy: always review by hand, never grouped",
+      "matchPackageNames": ["/immich/", "/cloudnative-pg/", "/cnpg/"],
+      "groupName": null,
+      "automerge": false
+    },
+    {
+      "description": "Backup/helper images: safe to automerge patches once CI is green",
+      "matchPackageNames": ["restic/restic", "busybox", "curlimages/curl", "rclone/rclone"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    }
+  ]
+}
