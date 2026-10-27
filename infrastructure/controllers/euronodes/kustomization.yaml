@@ -5,6 +5,9 @@ resources:
   - ../base/traefik
   - ../base/cert-manager
   - ../base/tailscale-operator
+  - ../base/monitoring
+  - alertmanager-telegram.sops.yaml
+  - alertmanager-watchdog.sops.yaml
   - operator-oauth.sops.yaml
   - talos-api-endpoints.yaml
 patches:
@@ -20,3 +23,19 @@ patches:
     target:
       kind: Service
       name: talos-api
+  - path: monitoring-patch.yaml
+    target:
+      kind: HelmRelease
+      name: prometheus
+  - path: monitoring-ingress-patch.yaml
+    target:
+      kind: Ingress
+      name: prometheus
+  # the Telegram chat that Alertmanager posts to
+  - target:
+      kind: HelmRelease
+      name: prometheus
+    patch: |-
+      - op: replace
+        path: /spec/values/alertmanager/config/receivers/0/telegram_configs/0/chat_id
+        value: -1004308064066

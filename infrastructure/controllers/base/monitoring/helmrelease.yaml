@@ -1,0 +1,221 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: prometheus
+      version: "29.39.0"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  install:
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    server:
+      global:
+        external_labels:
+          cluster: OVERRIDE-IN-CLUSTER-OVERLAY
+      retention: 15d
+      retentionSize: 4GB
+      persistentVolume:
+        size: 5Gi
+      resources:
+        requests:
+          cpu: 100m
+          memory: 384Mi
+        limits:
+          memory: 1Gi
+    alertmanager:
+      persistence:
+        size: 100Mi
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
+      # the bot token comes from a SOPS-encrypted Secret (`alertmanager-telegram`, key `token`) that each
+      # cluster overlay provides; `chat_id` is patched per cluster
+      extraSecretMounts:
+        - name: telegram
+          mountPath: /etc/telegram
+          secretName: alertmanager-telegram
+          readOnly: true
+        # the healthchecks.io ping URL for the Watchdog heartbeat (Secret `alertmanager-watchdog`, key `url`)
+        - name: watchdog
+          mountPath: /etc/watchdog
+          secretName: alertmanager-watchdog
+          readOnly: true
+      config:
+        route:
+          receiver: telegram
+          group_by: [alertname, cluster]
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 12h
+          routes:
+            # the always-firing Watchdog goes to healthchecks.io only (never to Telegram): it pings about every
+            # 5 minutes, and healthchecks.io alerts when the pings stop
+            - matchers:
+                - alertname = "Watchdog"
+              receiver: watchdog
+              group_wait: 0s
+              group_interval: 1m
+              repeat_interval: 5m
+        receivers:
+          - name: telegram
+            telegram_configs:
+              - bot_token_file: /etc/telegram/token
+                chat_id: 0
+                send_resolved: true
+          - name: watchdog
+            webhook_configs:
+              - url_file: /etc/watchdog/url
+                send_resolved: false
+    kube-state-metrics:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 48Mi
+        limits:
+          memory: 128Mi
+    prometheus-node-exporter:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 24Mi
+        limits:
+          memory: 64Mi
+    prometheus-pushgateway:
+      enabled: false
+    # keep the chart's scrape jobs that feed the alerts below and drop the rest (fewer series)
+    scrapeConfigs:
+      kubernetes-api-servers:
+        enabled: false
+      kubernetes-service-endpoints-slow:
+        enabled: false
+      kubernetes-services:
+        enabled: false
+      kubernetes-pods-slow:
+        enabled: false
+      prometheus-pushgateway:
+        enabled: false
+      # CloudNativePG advertises no prometheus.io annotations: the operator and every Postgres instance expose
+      # a port named `metrics`
+      cloudnative-pg:
+        job_name: cloudnative-pg
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            action: keep
+            regex: metrics
+          - source_labels: [__meta_kubernetes_pod_label_cnpg_io_podRole, __meta_kubernetes_pod_label_app_kubernetes_io_name]
+            action: keep
+            regex: instance;.*|;cloudnative-pg
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+    serverFiles:
+      alerting_rules.yml:
+        groups:
+          - name: meta
+            rules:
+              # always firing: proves Prometheus, Alertmanager and the path to healthchecks.io all work
+              - alert: Watchdog
+                expr: vector(1)
+                labels:
+                  severity: none
+                annotations:
+                  summary: "Heartbeat: the alerting pipeline is alive"
+          - name: node
+            rules:
+              - alert: NodeMemoryHigh
+                expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+                for: 10m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Memory usage above 90% for 10 minutes on {{ $labels.instance }}"
+              - alert: NodeDiskFilling
+                expr: |
+                  node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|devtmpfs|ramfs|iso9660"}
+                    / node_filesystem_size_bytes < 0.2
+                for: 10m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "{{ $labels.mountpoint }} has less than 20% free on {{ $labels.instance }}"
+              - alert: TargetDown
+                expr: up == 0
+                for: 10m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Scrape target {{ $labels.job }}/{{ $labels.instance }} has been down for 10 minutes"
+          - name: kubernetes
+            rules:
+              - alert: PodCrashLooping
+                expr: increase(kube_pod_container_status_restarts_total[30m]) >= 3
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) restarted 3 or more times in 30 minutes"
+              - alert: ContainerOOMKilled
+                expr: |
+                  (increase(kube_pod_container_status_restarts_total[10m]) > 0)
+                    and on (namespace, pod, container)
+                  (kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1)
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOM-killed"
+              - alert: PodNotRunning
+                expr: sum by (namespace, pod) (kube_pod_status_phase{phase=~"Pending|Unknown"}) > 0
+                for: 15m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "{{ $labels.namespace }}/{{ $labels.pod }} has been Pending or Unknown for 15 minutes"
+              - alert: DeploymentUnavailable
+                expr: kube_deployment_spec_replicas > kube_deployment_status_replicas_available
+                for: 15m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has fewer available replicas than desired"
+          - name: certificates
+            rules:
+              - alert: CertificateExpiringSoon
+                expr: certmanager_certificate_expiration_timestamp_seconds - time() < 14 * 86400
+                for: 1h
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in less than 14 days"
+              - alert: CertificateNotReady
+                expr: certmanager_certificate_ready_status{condition="False"} == 1
+                for: 15m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} is not Ready"
+          - name: postgres
+            rules:
+              - alert: PostgresDown
+                expr: cnpg_collector_up == 0
+                for: 5m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "PostgreSQL instance {{ $labels.namespace }}/{{ $labels.pod }} is not responding"

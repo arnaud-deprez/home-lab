@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: alertmanager-watchdog
+    namespace: monitoring
+stringData:
+    url: ENC[AES256_GCM,data:o0JEOImoiwJDZ795aI5+BV8Nu1qJgAaiUdLGdsT/DJqfB+g+iXUr5aJnI+O1GYVyygRKblqYLb8=,iv:p9nn85FjVsPaz/qNXjtZoC0uNKeQTg/5QXQbzho2/7Y=,tag:Zq3r9WpytZSN1bAGylXmeQ==,type:str]
+sops:
+    age:
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBSU2Y3TFlTQ3p1dGtHOUox
+            Wnk5bnQ2REtJbWhQZUp3dmZMWktsVTJUNmprCnN6aWU2WjVwb3A3bmplbEFSVFhD
+            NkM1WlAyelY0WkpVaDFGZ1p1TkE5bTgKLS0tIE00QU5PVWt1b2p5K1pkK215Qy9X
+            aU5leEgrQ2pmVW92UlYzd1JwQnVwbmsKtF2wlJzBl2TVzd5Upa0qW3dSXHfKdIAF
+            eiTLIiMC6ZVcW4FITrrUX5pj4r0hs/TqyMu3WUl3BWwjCwFYA9vRYA==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1e6scwyzknj2wfdj40xg3kgd2atckqtj4j33fgrxzapuzsmn45vfsw9kqu6
+    encrypted_regex: ^(data|stringData)$
+    lastmodified: "2026-10-27T22:19:21Z"
+    mac: ENC[AES256_GCM,data:QtJ6399H09QvF+kNTZddyJ3bGfqXUSfHy0izKhMZUb/G/YRQsjEUBkzyZPFpBG54QAdOn/u6Ud34R95CxVNIXt9IrkEII1X1r7YrZ5G5LDnManT7Ab5k2wUPQwESZmE1q1MwDBiW44cz0prl/kpHxEXEUlqsjCpQdWdoe66fgGk=,iv:cqCo3VjzDlU8L7KeCe0bJMwLS+O/KJ9eeG6qy9RgjBQ=,tag:qLB5VRZ0/GV0HSym98z4PQ==,type:str]
+    version: 3.13.3
