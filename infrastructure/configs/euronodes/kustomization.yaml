@@ -2,4 +2,16 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../base/local-path-provisioner
+  - ../base/flux-notifications
   - letsencrypt-issuers.yaml
+  - telegram-token.sops.yaml
+patches:
+  - path: flux-notifications-patch.yaml
+  # namespaces of this cluster's apps (the base only covers Flux and the infrastructure)
+  - target:
+      kind: Alert
+      name: flux-errors
+    patch: |-
+      - op: add
+        path: /spec/eventSources/-
+        value: {kind: HelmRelease, name: "*", namespace: immich}
