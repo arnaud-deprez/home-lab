@@ -2,8 +2,8 @@
 
 Runbook for the single-node Talos cluster on a [EuroNodes](https://euronodes.com) VPS (Portugal),
 GitOps-managed by Flux like the other clusters. The decisions and their reasons are in the table below;
-backups and restore are in [`backup-restore.md`](backup-restore.md), remote admin access in
-[`tailscale.md`](tailscale.md).
+backups and restore are in [`backup-restore.md`](backup-restore.md), alerting in
+[`monitoring.md`](monitoring.md), remote admin access in [`tailscale.md`](tailscale.md).
 
 Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and the SOPS-encrypted
 `secrets.sops.yaml`. **The generated `controlplane.yaml`, `worker.yaml`, `talosconfig` and
@@ -258,6 +258,14 @@ a database, the S3 bucket or the whole VM, and what has and has not been tested.
 Keep in a password manager: the age private key, the restic password, the Storage Box SSH key
 (`~/.ssh/euronodes-backup`) and the rclone crypt passwords. Turn on Storage Box snapshots in Hetzner's console.
 
+## Monitoring
+
+Prometheus and Alertmanager run in the `monitoring` namespace (UI over Tailscale only), Flux errors and backup
+runs are reported to Telegram, healthchecks.io watches the backups and the monitoring itself, and a GitHub
+Actions probe checks the public URLs. Everything about it, including how to test it, is in
+[`monitoring.md`](monitoring.md). The cluster cannot pull `registry.k8s.io`, so kube-state-metrics comes from a
+mirror (see its section 7).
+
 ## Known risks
 
 - The VM UUID changing makes the volumes unreadable (restore from backup).
@@ -275,5 +283,5 @@ Keep in a password manager: the age private key, the restic password, the Storag
 - rclone presents files as `rwxr-xr-x` (`--umask=022`) owned by root; Immich, the backup job and rclone all run as root.
 - An rclone restart interrupts Immich for about 20 seconds (watchdog restart) and fails in-flight uploads.
 - S3 request signing uses the legacy V2 scheme because the server rejects V4.
-- Backup failures and missed runs alert through healthchecks.io to Telegram (see
-  [`backup-restore.md`](backup-restore.md), section 2). There is no disk-usage, resource or uptime alert yet.
+- Alerting (Flux errors, node and pod health, certificates, backups, Storage Box space, public URLs) goes to
+  Telegram: see [`monitoring.md`](monitoring.md). The S3 bucket's own usage is not monitored.

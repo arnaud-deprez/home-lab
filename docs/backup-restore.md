@@ -66,7 +66,9 @@ run fails or when no ping arrives in time, which also covers a job that never st
 suspended CronJob, dead cluster). The ping URL is the `HC_PING_URL` key of each job's `restic-secrets` Secret
 (`https://hc-ping.com/<uuid>`); without it the job runs unchanged and nothing is reported. The checks are
 `euronodes-immich-backup` (cron `0 4 * * *` UTC, grace 14 h) and `euronodes-pocket-id-backup` (cron `30 3 * * *`
-UTC, grace 2 h). Failed or stuck runs can still be inspected with the commands in section 3.
+UTC, grace 2 h). Failed or stuck runs can still be inspected with the commands in section 3. A third daily
+check, `euronodes-storagebox-usage`, alerts when the Storage Box is 80% full. How all of it fits together and
+how to test it: [`monitoring.md`](monitoring.md).
 
 ## 3. Day-to-day
 

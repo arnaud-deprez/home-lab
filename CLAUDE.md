@@ -13,7 +13,8 @@ overlays, and Flux `HelmRelease`/`Kustomization` objects.
 Full details live in [`docs/flux.md`](docs/flux.md) (day-to-day ops, secrets, branch
 workflow), [`flux-bootstrap/README.md`](flux-bootstrap/README.md) (one-time cluster
 bootstrap) [`docs/euronodes.md`](docs/euronodes.md) (EuroNodes cluster: Talos, S3 storage) and
-[`docs/backup-restore.md`](docs/backup-restore.md) (its restic backups and how to restore). Read those before making non-trivial changes — this file only summarizes
+[`docs/backup-restore.md`](docs/backup-restore.md) (its restic backups and how to restore) and
+[`docs/monitoring.md`](docs/monitoring.md) (alerting: what watches what, where alerts go, how to test them). Read those before making non-trivial changes — this file only summarizes
 what's needed to navigate and validate.
 
 ## Layout and reconcile order
@@ -28,8 +29,8 @@ clusters/{laptop,tierhive,euronodes}/    one Flux entrypoint per cluster; same f
   infrastructure.yaml    Flux Kustomizations: infra-controllers -> infra-configs
   apps.yaml               Flux Kustomization: apps (after infra-controllers, infra-configs)
 infrastructure/
-  controllers/{base,laptop,tierhive,euronodes}   operators, ingress (CloudNativePG, Traefik, cert-manager) — reconciled first
-  configs/{base,laptop,tierhive,euronodes}       cluster config (local-path-provisioner, private CA issuer)
+  controllers/{base,laptop,tierhive,euronodes}   operators, ingress (CloudNativePG, Traefik, cert-manager), Prometheus — reconciled first
+  configs/{base,laptop,tierhive,euronodes}       cluster config (local-path-provisioner, private CA issuer, Flux notifications)
 apps/{base,laptop,tierhive,euronodes}            workloads (Immich, Pocket ID OIDC provider — id.home.arpa / id.tierhive.powple.com /
                                        id.vps.powple.com (euronodes);
                                        Pocket ID lives in the `identity` namespace)
@@ -59,6 +60,11 @@ rclone-crypt S3 mount and both apps are backed up with restic — see `docs/euro
   Kustomization centrally from each cluster's `kustomization.yaml` — no per-app setup
   needed. Each cluster has its own age key (`.sops.yaml` selects by path); secrets that
   differ per cluster live in that cluster's overlay, never in `base/`.
+- Monitoring is a shared base a cluster opts into (`infrastructure/controllers/base/monitoring`,
+  `infrastructure/configs/base/flux-notifications`); only the cluster name, chat id, tailnet hostname and secrets
+  are overlaid. Cluster-specific checks (backup stack, public URLs) live in that cluster's overlay or in the
+  probe workflow's matrix, not in the base. The Prometheus UI is reachable over Tailscale only
+  (`docs/monitoring.md`).
 
 Before making non-trivial changes, use the `flux-ops` skill to validate locally
 (kustomize render, dry-run, flux diff, helm template) — it also covers common Flux
