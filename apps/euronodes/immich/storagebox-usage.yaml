@@ -1,0 +1,68 @@
+# Daily disk-space check of the Hetzner Storage Box that holds both restic repositories: a full box makes
+# every backup fail. Reports to a healthchecks.io check (POST body = the usage line): success below the
+# threshold, /fail at or above it, and /fail when the box cannot be queried at all. Reuses the backup jobs'
+# SSH key and pinned host keys (`restic-secrets`); the ping URL is in `storagebox-usage` (key HC_PING_URL).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: storagebox-usage
+  namespace: immich
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: check
+              image: restic/restic:0.19.1
+              env:
+                - name: THRESHOLD_PERCENT
+                  value: "80"
+              envFrom:
+                - secretRef:
+                    name: storagebox-usage
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  post() { [ -z "${HC_PING_URL:-}" ] || wget -q -T 10 -t 2 -O /dev/null --post-data "$2" "$HC_PING_URL$1" || true; }
+                  fail() { echo "$1"; post /fail "$1"; exit 1; }
+                  post /start ""
+                  out=$(ssh -p 23 -i /ssh/ssh-privatekey -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20 u695423@u695423.your-storagebox.de df 2>&1) || fail "Storage Box check failed: cannot run df over SSH: $out"
+                  # df columns (1K blocks): filesystem, size, used, available, use%, mount
+                  set -- $(echo "$out" | tail -n 1)
+                  [ $# -ge 5 ] && [ "${2:-0}" -gt 0 ] 2>/dev/null || fail "Storage Box check failed: unexpected df output: $out"
+                  size=$2 used=$3
+                  pct=$((used * 100 / size))
+                  msg="Storage Box: ${pct}% used ($((used / 1048576)) of $((size / 1048576)) GiB), alert at ${THRESHOLD_PERCENT}%"
+                  echo "$msg"
+                  [ "$pct" -lt "$THRESHOLD_PERCENT" ] || fail "$msg"
+                  post "" "$msg"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              volumeMounts:
+                - name: ssh
+                  mountPath: /ssh
+                  readOnly: true
+          volumes:
+            - name: ssh
+              secret:
+                secretName: restic-secrets
+                defaultMode: 0400
+                items:
+                  - key: ssh-privatekey
+                    path: ssh-privatekey
+                  - key: known_hosts
+                    path: known_hosts

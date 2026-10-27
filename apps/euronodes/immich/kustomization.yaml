@@ -6,6 +6,8 @@ resources:
   - rclone-mount.yaml
   - restic-secret.sops.yaml
   - restic-backup.yaml
+  - storagebox-usage.yaml
+  - storagebox-usage-secret.sops.yaml
 patches:
   - path: helmrelease-patch.yaml
     target:
