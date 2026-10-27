@@ -17,7 +17,7 @@ spec:
           restartPolicy: Never
           initContainers:
             - name: wait-mount
-              image: busybox:1.37
+              image: busybox:1.38
               command: [sh, -c, "test -f /mnt/rclone/.mounted"]
               volumeMounts:
                 - name: rclone
