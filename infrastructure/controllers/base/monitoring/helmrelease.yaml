@@ -148,7 +148,7 @@ spec:
                   summary: "Memory usage above 90% for 10 minutes on {{ $labels.instance }}"
               - alert: NodeDiskFilling
                 expr: |
-                  node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|devtmpfs|ramfs|iso9660"}
+                  node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|devtmpfs|ramfs|iso9660|fuse.rclone"}
                     / node_filesystem_size_bytes < 0.2
                 for: 10m
                 labels:
