@@ -1,0 +1,48 @@
+name: probe
+
+# External uptime probe: see .github/scripts/probe.sh and docs/monitoring.md.
+# Scheduled workflows only run from the default branch. Each run costs at least one Actions minute per
+# cluster in the matrix, and a private repo has a monthly quota: every 30 minutes is ~1,440 minutes a month
+# for one cluster.
+on:
+  schedule:
+    - cron: "7,37 * * * *" # off the hour and half hour, when GitHub's scheduler is busiest
+  workflow_dispatch:
+  # TEMP: remove before merging. Lets the workflow run once from the feature branch.
+  push:
+    branches: [feat/euronodes-monitoring]
+    paths: [.github/workflows/probe.yaml, .github/scripts/probe.sh]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cluster: euronodes
+            chat_id: "-1004308064066"
+            # TEMP: the `selftest` line below fails on purpose to prove the Telegram path; remove it after the first run
+            checks: |
+              pocket-id|https://id.vps.powple.com/healthz|204
+              immich|https://immich.vps.powple.com/api/server/ping|200
+              selftest|https://id.vps.powple.com/healthz|404
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+      - name: Probe ${{ matrix.cluster }}
+        env:
+          CLUSTER: ${{ matrix.cluster }}
+          CHECKS: ${{ matrix.checks }}
+          TELEGRAM_CHAT_ID: ${{ matrix.chat_id }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.PROBE_TELEGRAM_BOT_TOKEN }}
+        run: .github/scripts/probe.sh
