@@ -60,7 +60,13 @@ checking against the box's pinned keys.
 **Immich's own database dumps:** Immich writes `immich-db-backup-*.sql.gz` into its `backups` folder every night at
 02:00 and keeps the last 14. The restic job copies that folder, which is how the Immich database is backed up.
 
-**There is no alerting yet.** A failed or stuck run is only visible with the commands in section 3.
+**Alerting.** Each job pings a [healthchecks.io](https://healthchecks.io) check: `/start` when the script begins and
+its exit code when it ends. healthchecks.io alerts the "Powple Homelab alerts" Telegram channel (and email) when a
+run fails or when no ping arrives in time, which also covers a job that never started (failed init container,
+suspended CronJob, dead cluster). The ping URL is the `HC_PING_URL` key of each job's `restic-secrets` Secret
+(`https://hc-ping.com/<uuid>`); without it the job runs unchanged and nothing is reported. The checks are
+`euronodes-immich-backup` (cron `0 4 * * *` UTC, grace 14 h) and `euronodes-pocket-id-backup` (cron `30 3 * * *`
+UTC, grace 2 h). Failed or stuck runs can still be inspected with the commands in section 3.
 
 ## 3. Day-to-day
 

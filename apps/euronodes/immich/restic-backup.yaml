@@ -31,6 +31,11 @@ spec:
                 - -c
                 - |
                   set -eu
+                  # healthchecks.io dead-man's switch: /start now, then the exit code (0 = success) on exit.
+                  # A failed ping never fails the backup; a missing ping is what raises the alert.
+                  ping() { [ -z "${HC_PING_URL:-}" ] || wget -q -T 10 -t 2 -O /dev/null "$HC_PING_URL$1" || true; }
+                  trap 'ping "/$?"' EXIT
+                  ping /start
                   SFTP_CMD="ssh -p 23 -i /ssh/ssh-privatekey -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=4 u695423@u695423.your-storagebox.de -s sftp"
                   r() { restic -o "sftp.command=$SFTP_CMD" "$@"; }
                   # create the repository only when restic says it does not exist (exit 10); any other

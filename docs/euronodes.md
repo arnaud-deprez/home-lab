@@ -275,7 +275,5 @@ Keep in a password manager: the age private key, the restic password, the Storag
 - rclone presents files as `rwxr-xr-x` (`--umask=022`) owned by root; Immich, the backup job and rclone all run as root.
 - An rclone restart interrupts Immich for about 20 seconds (watchdog restart) and fails in-flight uploads.
 - S3 request signing uses the legacy V2 scheme because the server rejects V4.
-- **Nothing alerts when a backup fails or stops.** The jobs have deadlines (Immich 12 h, Pocket ID 1 h) so a
-  hang cannot block later runs, but a failed or skipped run is only visible with `kubectl get jobs -A`.
-  There is no disk-usage alert either. Check the jobs now and then until
-  monitoring is added (for example a healthchecks-style ping at the end of each job).
+- Backup failures and missed runs alert through healthchecks.io to Telegram (see
+  [`backup-restore.md`](backup-restore.md), section 2). There is no disk-usage, resource or uptime alert yet.
