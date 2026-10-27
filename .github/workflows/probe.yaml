@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   probe:
+    name: probe (${{ matrix.cluster }})
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     strategy:
@@ -30,11 +31,9 @@ jobs:
         include:
           - cluster: euronodes
             chat_id: "-1004308064066"
-            # TEMP: the `selftest` line below fails on purpose to prove the Telegram path; remove it after the first run
             checks: |
               pocket-id|https://id.vps.powple.com/healthz|204
               immich|https://immich.vps.powple.com/api/server/ping|200
-              selftest|https://id.vps.powple.com/healthz|404
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
