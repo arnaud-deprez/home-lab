@@ -9,3 +9,10 @@ spec:
       global:
         external_labels:
           cluster: euronodes
+    # registry.k8s.io answers 403 to this VPS's IP range and kube-state-metrics is published nowhere else
+    # upstream: use SUSE/Rancher's Docker Hub mirror (older than the chart's default, v2.20.0)
+    kube-state-metrics:
+      image:
+        registry: docker.io
+        repository: rancher/mirrored-kube-state-metrics-kube-state-metrics
+        tag: v2.17.0
