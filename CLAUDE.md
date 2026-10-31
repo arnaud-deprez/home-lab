@@ -13,7 +13,8 @@ overlays, and Flux `HelmRelease`/`Kustomization` objects.
 Full details live in [`docs/flux.md`](docs/flux.md) (day-to-day ops, secrets, branch
 workflow), [`flux-bootstrap/README.md`](flux-bootstrap/README.md) (one-time cluster
 bootstrap) [`docs/euronodes.md`](docs/euronodes.md) (EuroNodes cluster: Talos, S3 storage) and
-[`docs/backup-restore.md`](docs/backup-restore.md) (its restic backups and how to restore) and
+[`docs/backup-restore.md`](docs/backup-restore.md) (its restic backups and how to restore),
+[`docs/disk-backup.md`](docs/disk-backup.md) (manual copy to an external disk, `scripts/euronodes-disk-backup.sh`) and
 [`docs/monitoring.md`](docs/monitoring.md) (alerting: what watches what, where alerts go, how to test them). Read those before making non-trivial changes — this file only summarizes
 what's needed to navigate and validate.
 
@@ -60,6 +61,12 @@ rclone-crypt S3 mount and both apps are backed up with restic — see `docs/euro
   Kustomization centrally from each cluster's `kustomization.yaml` — no per-app setup
   needed. Each cluster has its own age key (`.sops.yaml` selects by path); secrets that
   differ per cluster live in that cluster's overlay, never in `base/`.
+  **Claude must never decrypt secrets** (no `sops -d`, no use of the age keys, and no running scripts
+  that decrypt at runtime, such as `scripts/euronodes-disk-backup.sh`): decrypted values end up in the
+  session transcript. Work from the encrypted file's plaintext key names and the manifests that consume
+  it, and ask the user to run any command that needs the real values. Likewise never print secrets to
+  the console (`kubectl get secret -o yaml`, `echo $TOKEN`, `cat` of a key file, `env`, and so on), even
+  when they are not SOPS-encrypted.
 - Monitoring is a shared base a cluster opts into (`infrastructure/controllers/base/monitoring`,
   `infrastructure/configs/base/flux-notifications`); only the cluster name, chat id, tailnet hostname and secrets
   are overlaid. Cluster-specific checks (backup stack, public URLs) live in that cluster's overlay or in the

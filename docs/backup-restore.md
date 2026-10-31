@@ -3,6 +3,7 @@
 How the EuroNodes cluster is backed up with [restic](https://restic.net), and how to get things back.
 Written to be followed under pressure: every scenario has numbered steps with copy-paste commands.
 Cluster setup itself (Talos, Flux, rclone, TLS) is in [`euronodes.md`](euronodes.md).
+A third copy on a personal external disk, made by hand every few months, is in [`disk-backup.md`](disk-backup.md).
 
 **Read this first:** you need three things to restore anything, and none of them is in the cluster.
 
@@ -25,6 +26,7 @@ Cluster setup itself (Talos, Flux, rclone, TLS) is in [`euronodes.md`](euronodes
 files of the running database (the dumps cover it), the container images.
 
 The S3 bucket is the *live* copy of your photos, not a backup. The Storage Box is the second, independent copy.
+The third copy is an offline external disk with the photos as plain files ([`disk-backup.md`](disk-backup.md)).
 
 ## 2. How it is set up
 

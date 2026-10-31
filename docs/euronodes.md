@@ -254,6 +254,7 @@ one repository per app. **Everything about them, and every restore procedure, is
 [`backup-restore.md`](backup-restore.md)**: what is covered, how the jobs work, daily checks, restoring a file,
 a database, the S3 bucket or the whole VM, and what has and has not been tested. Tested restore pods are in
 [`restore/`](restore/).
+A manual third copy on an external disk (photos as plain files) is described in [`disk-backup.md`](disk-backup.md).
 
 Keep in a password manager: the age private key, the restic password, the Storage Box SSH key
 (`~/.ssh/euronodes-backup`) and the rclone crypt passwords. Turn on Storage Box snapshots in Hetzner's console.
