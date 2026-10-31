@@ -224,7 +224,9 @@ How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
 
 - `rclone-mount.yaml`: a privileged Deployment mounts the crypt remote at `/var/mnt/rclone` (the Talos
   directory volume) with bidirectional propagation. Immich bind-mounts `library` and `upload` from it
-  (`HostToContainer`) and an init container waits for the marker object `.mounted`.
+  (`HostToContainer`) and an init container waits for the marker object `.mounted`. The marker is created once, with the bucket:
+  `echo ok | rclone rcat crypt:.mounted` (any content; only its existence is tested). A new bucket needs it again,
+  because backups and the disk copy do not contain it.
 - `rclone-secret.sops.yaml`: the rclone config as environment variables. The S3 server rejects V4
   request signing (`SignatureDoesNotMatch`), so the remote needs `v2_auth=true`, path-style addressing
   and `directory_markers=true` (so empty folders persist).

@@ -259,6 +259,9 @@ The passkeys live in the database, so they come back with it. They work as long 
    r restore latest --tag immich --target / --exclude-xattr security.selinux \
      --include /mnt/rclone/library --include /mnt/rclone/upload
    ```
+   A new bucket also lacks the marker object `.mounted` at the crypt root, which Immich's init container and the
+   nightly job wait for (it is not in the snapshot, which holds only `library` and `upload`). Create it in the same
+   shell, once the mount is up: `echo ok > /mnt/rclone/.mounted`. Without it Immich waits forever and the backup job fails.
    Restore time is the size of the library over the link, so it can take hours; the shell pod keeps running. The
    `.immich` marker files come back with the folders.
 4. Scale Immich up (`flux resume`, `--replicas=1`), check a few photos open, resume the jobs.
