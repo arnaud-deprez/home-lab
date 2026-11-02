@@ -77,6 +77,10 @@ spec:
             - --vfs-write-back=5s
             - --dir-cache-time=1m
             - --umask=022
+            # Single PUTs over ~100 MB get a 413 from the proxy in front of S3: upload anything
+            # bigger than 50M as multipart. Buffers: chunk x 4 concurrency x 4 transfers = 256Mi worst case.
+            - --s3-upload-cutoff=50M
+            - --s3-chunk-size=16M
           envFrom:
             - secretRef:
                 name: rclone-config
