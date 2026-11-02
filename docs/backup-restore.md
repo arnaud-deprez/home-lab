@@ -3,6 +3,7 @@
 How the EuroNodes cluster is backed up with [restic](https://restic.net), and how to get things back.
 Written to be followed under pressure: every scenario has numbered steps with copy-paste commands.
 Cluster setup itself (Talos, Flux, rclone, TLS) is in [`euronodes.md`](euronodes.md).
+A third copy on a personal external disk, made by hand every few months, is in [`disk-backup.md`](disk-backup.md).
 
 **Read this first:** you need three things to restore anything, and none of them is in the cluster.
 
@@ -25,6 +26,7 @@ Cluster setup itself (Talos, Flux, rclone, TLS) is in [`euronodes.md`](euronodes
 files of the running database (the dumps cover it), the container images.
 
 The S3 bucket is the *live* copy of your photos, not a backup. The Storage Box is the second, independent copy.
+The third copy is an offline external disk with the photos as plain files ([`disk-backup.md`](disk-backup.md)).
 
 ## 2. How it is set up
 
@@ -60,7 +62,15 @@ checking against the box's pinned keys.
 **Immich's own database dumps:** Immich writes `immich-db-backup-*.sql.gz` into its `backups` folder every night at
 02:00 and keeps the last 14. The restic job copies that folder, which is how the Immich database is backed up.
 
-**There is no alerting yet.** A failed or stuck run is only visible with the commands in section 3.
+**Alerting.** Each job pings a [healthchecks.io](https://healthchecks.io) check: `/start` when the script begins and
+its exit code when it ends. healthchecks.io alerts the "Powple Homelab alerts" Telegram channel (and email) when a
+run fails or when no ping arrives in time, which also covers a job that never started (failed init container,
+suspended CronJob, dead cluster). The ping URL is the `HC_PING_URL` key of each job's `restic-secrets` Secret
+(`https://hc-ping.com/<uuid>`); without it the job runs unchanged and nothing is reported. The checks are
+`euronodes-immich-backup` (cron `0 4 * * *` UTC, grace 14 h) and `euronodes-pocket-id-backup` (cron `30 3 * * *`
+UTC, grace 2 h). Failed or stuck runs can still be inspected with the commands in section 3. A third daily
+check, `euronodes-storagebox-usage`, alerts when the Storage Box is 80% full. How all of it fits together and
+how to test it: [`monitoring.md`](monitoring.md).
 
 ## 3. Day-to-day
 
@@ -249,6 +259,9 @@ The passkeys live in the database, so they come back with it. They work as long 
    r restore latest --tag immich --target / --exclude-xattr security.selinux \
      --include /mnt/rclone/library --include /mnt/rclone/upload
    ```
+   A new bucket also lacks the marker object `.mounted` at the crypt root, which Immich's init container and the
+   nightly job wait for (it is not in the snapshot, which holds only `library` and `upload`). Create it in the same
+   shell, once the mount is up: `echo ok > /mnt/rclone/.mounted`. Without it Immich waits forever and the backup job fails.
    Restore time is the size of the library over the link, so it can take hours; the shell pod keeps running. The
    `.immich` marker files come back with the folders.
 4. Scale Immich up (`flux resume`, `--replicas=1`), check a few photos open, resume the jobs.

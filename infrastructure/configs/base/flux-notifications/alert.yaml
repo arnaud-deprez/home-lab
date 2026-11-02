@@ -1,0 +1,22 @@
+# Errors only. An Alert watches one namespace per source (no all-namespaces wildcard), so this covers
+# Flux itself and the infrastructure HelmReleases; a cluster overlay appends the namespaces of its apps and
+# sets `eventMetadata.cluster` so the message says which cluster it comes from.
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: flux-errors
+  namespace: flux-system
+spec:
+  providerRef:
+    name: telegram
+  eventSeverity: error
+  eventMetadata:
+    cluster: OVERRIDE-IN-CLUSTER-OVERLAY
+  eventSources:
+    - {kind: GitRepository, name: "*", namespace: flux-system}
+    - {kind: Kustomization, name: "*", namespace: flux-system}
+    - {kind: HelmRepository, name: "*", namespace: flux-system}
+    - {kind: HelmRelease, name: "*", namespace: cert-manager}
+    - {kind: HelmRelease, name: "*", namespace: cnpg-system}
+    - {kind: HelmRelease, name: "*", namespace: tailscale-operator}
+    - {kind: HelmRelease, name: "*", namespace: traefik}

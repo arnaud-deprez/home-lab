@@ -2,8 +2,8 @@
 
 Runbook for the single-node Talos cluster on a [EuroNodes](https://euronodes.com) VPS (Portugal),
 GitOps-managed by Flux like the other clusters. The decisions and their reasons are in the table below;
-backups and restore are in [`backup-restore.md`](backup-restore.md), remote admin access in
-[`tailscale.md`](tailscale.md).
+backups and restore are in [`backup-restore.md`](backup-restore.md), alerting in
+[`monitoring.md`](monitoring.md), remote admin access in [`tailscale.md`](tailscale.md).
 
 Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and the SOPS-encrypted
 `secrets.sops.yaml`. **The generated `controlplane.yaml`, `worker.yaml`, `talosconfig` and
@@ -224,7 +224,9 @@ How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
 
 - `rclone-mount.yaml`: a privileged Deployment mounts the crypt remote at `/var/mnt/rclone` (the Talos
   directory volume) with bidirectional propagation. Immich bind-mounts `library` and `upload` from it
-  (`HostToContainer`) and an init container waits for the marker object `.mounted`.
+  (`HostToContainer`) and an init container waits for the marker object `.mounted`. The marker is created once, with the bucket:
+  `echo ok | rclone rcat crypt:.mounted` (any content; only its existence is tested). A new bucket needs it again,
+  because backups and the disk copy do not contain it.
 - `rclone-secret.sops.yaml`: the rclone config as environment variables. The S3 server rejects V4
   request signing (`SignatureDoesNotMatch`), so the remote needs `v2_auth=true`, path-style addressing
   and `directory_markers=true` (so empty folders persist).
@@ -254,9 +256,18 @@ one repository per app. **Everything about them, and every restore procedure, is
 [`backup-restore.md`](backup-restore.md)**: what is covered, how the jobs work, daily checks, restoring a file,
 a database, the S3 bucket or the whole VM, and what has and has not been tested. Tested restore pods are in
 [`restore/`](restore/).
+A manual third copy on an external disk (photos as plain files) is described in [`disk-backup.md`](disk-backup.md).
 
 Keep in a password manager: the age private key, the restic password, the Storage Box SSH key
 (`~/.ssh/euronodes-backup`) and the rclone crypt passwords. Turn on Storage Box snapshots in Hetzner's console.
+
+## Monitoring
+
+Prometheus and Alertmanager run in the `monitoring` namespace (UI over Tailscale only), Flux errors and backup
+runs are reported to Telegram, healthchecks.io watches the backups and the monitoring itself, and a GitHub
+Actions probe checks the public URLs. Everything about it, including how to test it, is in
+[`monitoring.md`](monitoring.md). The cluster cannot pull `registry.k8s.io`, so kube-state-metrics comes from a
+mirror (see its section 7).
 
 ## Known risks
 
@@ -275,7 +286,5 @@ Keep in a password manager: the age private key, the restic password, the Storag
 - rclone presents files as `rwxr-xr-x` (`--umask=022`) owned by root; Immich, the backup job and rclone all run as root.
 - An rclone restart interrupts Immich for about 20 seconds (watchdog restart) and fails in-flight uploads.
 - S3 request signing uses the legacy V2 scheme because the server rejects V4.
-- **Nothing alerts when a backup fails or stops.** The jobs have deadlines (Immich 12 h, Pocket ID 1 h) so a
-  hang cannot block later runs, but a failed or skipped run is only visible with `kubectl get jobs -A`.
-  There is no disk-usage alert either. Check the jobs now and then until
-  monitoring is added (for example a healthchecks-style ping at the end of each job).
+- Alerting (Flux errors, node and pod health, certificates, backups, Storage Box space, public URLs) goes to
+  Telegram: see [`monitoring.md`](monitoring.md). The S3 bucket's own usage is not monitored.

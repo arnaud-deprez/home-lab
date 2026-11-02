@@ -1,0 +1,19 @@
+# The Prometheus UI is reachable only over Tailscale (the operator creates a proxy on the tailnet); there is
+# deliberately no Traefik route and no public hostname. Each cluster overlay patches the tailnet hostname
+# (tls[0].hosts[0]) so the clusters do not clash. Prometheus has no authentication: access is controlled by
+# the tailnet policy (see docs/monitoring.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: prometheus-server
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - prometheus
