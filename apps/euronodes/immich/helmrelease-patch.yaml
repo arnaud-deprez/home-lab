@@ -58,6 +58,29 @@ spec:
                 - sh
                 - -c
                 - until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
+          containers:
+            main:
+              # The API and the job workers share one process: during imports (transcoding, face
+              # detection) /api/server/ping can take several seconds, and the chart's 1s probe
+              # timeout made the kubelet kill the pod in a loop. Be tolerant, and don't run BestEffort.
+              probes:
+                liveness:
+                  spec:
+                    timeoutSeconds: 15
+                    failureThreshold: 6
+                readiness:
+                  spec:
+                    timeoutSeconds: 15
+                    failureThreshold: 6
+                startup:
+                  spec:
+                    timeoutSeconds: 15
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: 1Gi
+                limits:
+                  memory: 3Gi
     machine-learning:
       controllers:
         main:
