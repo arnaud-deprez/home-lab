@@ -82,6 +82,11 @@ spec:
             - --s3-upload-cutoff=50M
             - --s3-chunk-size=32M
             - --transfers=4
+            # The proxy in front of S3 resets connections / sends HTTP/2 GOAWAY when immich jobs and a
+            # restic backup read through the mount at once (exif reads then hang for 120s and
+            # immich-server fails its probes): stay on HTTP/1.1 and cap simultaneous connections.
+            - --s3-disable-http2
+            - --max-connections=8
           envFrom:
             - secretRef:
                 name: rclone-config
