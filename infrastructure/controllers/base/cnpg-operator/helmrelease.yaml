@@ -17,3 +17,34 @@ spec:
   values:
     crds:
       create: true
+    webhook:
+      startupProbe:
+        # the chart's 6 x 5s = 30s is too short: the operator needs ~20s to start on this node and then
+        # waits for the leader lease. Allow 30 x 5s = 150s before the kubelet gives up.
+        failureThreshold: 30
+        periodSeconds: 5
+  # The chart only exposes initialDelaySeconds / failureThreshold / periodSeconds for the probes and ignores
+  # timeoutSeconds, so the kubelet's 1s default applies. On a busy single node the operator's /readyz answers
+  # slower than that, the liveness probe kills it (exit 137, PodCrashLooping): patch the rendered Deployment.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: cnpg-operator-cloudnative-pg
+            patch: |
+              - op: add
+                path: /spec/template/spec/containers/0/livenessProbe/timeoutSeconds
+                value: 10
+              - op: add
+                path: /spec/template/spec/containers/0/livenessProbe/failureThreshold
+                value: 6
+              - op: add
+                path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+                value: 10
+              - op: add
+                path: /spec/template/spec/containers/0/readinessProbe/failureThreshold
+                value: 6
+              - op: add
+                path: /spec/template/spec/containers/0/startupProbe/timeoutSeconds
+                value: 10

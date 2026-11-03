@@ -35,6 +35,13 @@ They are separate so that a leaked probe token (it lives at GitHub) can be revok
 silencing the cluster's own alerts. Healthchecks.io has its own Telegram integration (its bot, configured in
 its web UI) and also emails the account address by default.
 
+Alertmanager messages use a compact template (one line per alert: its `summary` annotation, at most 15 per
+message), set on the `telegram` receiver in the monitoring base. Alertmanager's default template lists every
+label of every alert, and a few grouped alerts exceed Telegram's 4096 characters: Telegram then rejects the
+message and the only thing you receive is "message length exceeds Telegram limits". Test a template change
+without sending anything: `kubectl -n monitoring exec -i prometheus-alertmanager-0 -c alertmanager -- amtool
+template render --template.glob='/nonexistent/*.tmpl' --template.text='<template>' --template.data=/dev/stdin < data.json`.
+
 The channel ID (`-1004308064066`) is not a secret and sits in plain text in the manifests and the workflow.
 
 ## 3. What alerts

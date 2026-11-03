@@ -76,6 +76,15 @@ spec:
               - bot_token_file: /etc/telegram/token
                 chat_id: 0
                 send_resolved: true
+                # The default template prints every label of every alert (kube-state-metrics series carry ~20
+                # of them) and a few grouped alerts exceed Telegram's 4096 characters: the whole notification
+                # is then dropped. One line per alert (its summary), at most 15, plain text.
+                parse_mode: ""
+                message: |-
+                  {{ if eq .Status "firing" }}🔥 FIRING{{ else }}✅ RESOLVED{{ end }} [{{ .CommonLabels.cluster }}]{{ if .CommonLabels.severity }} [{{ .CommonLabels.severity }}]{{ end }} {{ .CommonLabels.alertname }}{{ if gt (len .Alerts) 1 }} ({{ len .Alerts }}){{ end }}
+                  {{ range $i, $a := .Alerts }}{{ if lt $i 15 }}• {{ if $a.Annotations.summary }}{{ $a.Annotations.summary }}{{ else }}{{ $a.Labels.alertname }}{{ end }}
+                  {{ end }}{{ end }}{{ if gt (len .Alerts) 15 }}… and more (see Prometheus)
+                  {{ end }}
           - name: watchdog
             webhook_configs:
               - url_file: /etc/watchdog/url
