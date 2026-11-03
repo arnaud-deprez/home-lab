@@ -90,6 +90,13 @@ spec:
           envFrom:
             - secretRef:
                 name: rclone-config
+          lifecycle:
+            preStop:
+              exec:
+                # Best effort: detach the FUSE mount on a graceful stop so the host is not left with a dead
+                # mount (kubelet: "transport endpoint is not connected"). It does not run after an OOM kill
+                # or a SIGKILL: see "Stale rclone mount" in docs/euronodes.md.
+                command: [fusermount3, -uz, /mnt/rclone]
           securityContext:
             privileged: true
           resources:

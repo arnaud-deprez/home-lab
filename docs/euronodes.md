@@ -235,6 +235,37 @@ How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
   annotation (RBAC limited to `patch` on that one Deployment; the service-account token is mounted only in that
   sidecar, not in the privileged rclone container). Immich is writable again about
   20 seconds after a kill.
+- **Stale rclone mount.** If rclone dies without unmounting (OOM kill, SIGKILL after the grace period, node
+  crash), the kernel keeps the FUSE mount at `/var/mnt/rclone` with nothing serving it. The new rclone pod then
+  stays in `CreateContainerError` with `stat /var/mnt/rclone: transport endpoint is not connected`, and Immich's
+  `/data/library` and `/data/upload` are dead. A `preStop` hook (`fusermount3 -uz`) detaches the mount on a
+  graceful stop, but it is best effort: it cannot run after an OOM kill or a SIGKILL, so this recovery is still
+  needed. Talos has no shell, so lazily unmount from a one-shot privileged pod, then let the kubelet retry
+  (the rclone pod starts and the watchdog restarts Immich):
+
+  ```sh
+  kubectl apply -f - <<'EOF'
+  apiVersion: v1
+  kind: Pod
+  metadata: {name: umount-stale-rclone, namespace: immich}
+  spec:
+    restartPolicy: Never
+    nodeName: euronodes
+    containers:
+      - name: umount
+        image: busybox:1.38
+        command: [sh, -c, "umount -l /host/rclone; echo exit=$?"]
+        securityContext: {privileged: true}
+        volumeMounts: [{name: host, mountPath: /host, mountPropagation: Bidirectional}]
+    volumes: [{name: host, hostPath: {path: /var/mnt}}]
+  EOF
+  kubectl -n immich logs umount-stale-rclone     # exit=0
+  kubectl -n immich delete pod umount-stale-rclone
+  ```
+
+  Rebooting the node (`talosctl reboot`) also clears it, with a longer outage.
+  Confirm with `talosctl read /proc/self/mountinfo | grep rclone`: a `fuse.rclone` entry with no rclone pod
+  running is the stale one.
 - Moving an existing library onto the mount: Immich's integrity check refuses to start if the `.immich`
   marker file is missing in `library/` or `upload/`. Copy the markers across from the old volume.
 - Failed or killed uploads can leave partial files on S3 that Immich does not track. Delete them in
@@ -281,8 +312,11 @@ mirror (see its section 7).
   hostname, so keep the hostnames unchanged.
 - Traefik: port 80 (redirect and ACME only) has 30 s timeouts. Port 443 allows requests up to 1 h so large Immich
   uploads and downloads on slow links are not cut; shorten it if uploads are always small.
-- rclone has a 512 MiB memory limit (it used 78 MiB, peaking at 174 MiB, during testing). An out-of-memory kill
-  restarts the mount and, through the watchdog, Immich.
+- rclone has a 1 GiB memory limit (multipart uploads buffer chunk size x 4 x `--transfers`). An out-of-memory kill
+  restarts the mount and, through the watchdog, Immich, and can leave a stale mount that needs a manual
+  unmount (see _Stale rclone mount_).
+- The proxy in front of S3 resets connections under concurrent reads: rclone runs with `--s3-disable-http2` and
+  `--max-connections=8`. Avoid running a full restic backup while Immich's metadata and face-detection queues are busy.
 - rclone presents files as `rwxr-xr-x` (`--umask=022`) owned by root; Immich, the backup job and rclone all run as root.
 - An rclone restart interrupts Immich for about 20 seconds (watchdog restart) and fails in-flight uploads.
 - S3 request signing uses the legacy V2 scheme because the server rejects V4.
