@@ -108,7 +108,33 @@ REPO=restic-immich r check                      # structure check; add --read-da
 
 The first connection asks you to trust the box's host key. Its ED25519 fingerprint is
 `SHA256:XqONwb1S0zuj5A1CDxpOSuD2hnAArV1A3wKY7Z3sdgM`.
-If a command says the repository is locked and no job is running, `r unlock` removes the stale lock.
+If a command says the repository is locked and no job is running, see [Clearing a stale lock](#clearing-a-stale-lock).
+
+### Clearing a stale lock
+
+A backup pod that is killed mid-run (node stall, OOM, eviction) leaves its lock in the repository. Every later
+run then backs up fine but fails at `forget --prune` with `repository is already locked` (exit 11), and the
+healthchecks.io ping reports a failure. The jobs deliberately do **not** unlock on their own: removing a lock
+is a human decision. Do it by hand:
+
+1. Make sure nothing is running: `kubectl get pods -A | grep -E 'restic-backup|pocket-id-backup'` must show no
+   `Running` or `Init` pod (completed and failed ones are fine). Check any manual job too.
+2. Read the lock: `REPO=restic-immich r list locks` then `r cat lock <id>` shows host, PID and creation time.
+   A lock whose creator pod no longer exists (or that is hours old) is stale.
+3. Remove it, from your laptop (setup above, repository names `restic-immich` / `restic-pocket-id`):
+
+   ```sh
+   REPO=restic-immich r unlock          # removes stale locks only (not refreshed for 30 min / process gone)
+   REPO=restic-pocket-id r unlock
+   ```
+
+   Plain `unlock` is enough. Do not use `--remove-all` unless you have confirmed no job is running: it also
+   removes live locks, and a `forget --prune` running next to a backup can delete data the backup still needs.
+4. Run the backup again (see Day-to-day) and check that it ends with `no errors were found`.
+
+The jobs have `backoffLimit: 0`: a failed run is not retried, because a retry re-reads the whole dataset
+(about 89 GiB for Immich) and saturated the node's I/O on 2026-11-04. The next run is the following night, or
+start one by hand.
 
 ## 4. Two ways to restore
 
@@ -306,7 +332,7 @@ someone deleting the repository with the cluster's key.
 | ------- | ------------- |
 | `Fatal: wrong password or no key found` (exit 12) | Wrong `RESTIC_PASSWORD` in your shell or in the secret |
 | `repository does not exist` (exit 10) from your laptop | Wrong `REPO`, or the box is new. The jobs create it; from the laptop `r init` creates it by hand. Double-check the name first. |
-| `unable to create lock … already locked` | Another run is active, or a crashed run left a lock. If no job is running: `r unlock` |
+| `unable to create lock … already locked` | Another run is active, or a crashed run left a lock. If no job is running, follow [Clearing a stale lock](#clearing-a-stale-lock) |
 | Restore ends with `Fatal: There were N errors` mentioning `security.selinux` | Add `--exclude-xattr security.selinux` (data is already restored) |
 | `ssh … UNPROTECTED PRIVATE KEY FILE` in a pod | Do not set `fsGroup` on pods that mount the key; Kubernetes then makes it group-readable |
 | Immich refuses to start after folders were replaced | Its folder check wants an `.immich` marker file in each storage folder. `library`, `upload`, `profile` and `backups` get theirs back with the restore; `thumbs` and `encoded-video` are not in the backup, so let Immich create them on a first start before restoring the database (5.5, step 6) or follow the fix on Immich's folder-check page |

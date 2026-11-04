@@ -5,6 +5,13 @@ metadata:
   namespace: immich
 spec:
   instances: 1
+  # Tolerate short node-wide I/O stalls (seen 2026-11-04): a liveness failure restarts a healthy Postgres,
+  # which cascades into app crash loops. 10s x 12 failures = 2 min instead of the default 30s.
+  probes:
+    liveness:
+      periodSeconds: 10
+      timeoutSeconds: 10
+      failureThreshold: 12
   imageName: ghcr.io/cloudnative-pg/postgresql:18-standard-trixie
   storage:
     size: 2Gi
