@@ -25,3 +25,25 @@ spec:
   values:
     crds:
       enabled: true
+    # guaranteed CPU share when the node is saturated (no limits). The webhook restarted ~28 times on probe
+    # timeouts during node CPU stalls (2026-11-04), hence the looser probes.
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+    webhook:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+      livenessProbe:
+        timeoutSeconds: 5
+        failureThreshold: 6
+      readinessProbe:
+        timeoutSeconds: 5
+        failureThreshold: 6
+    cainjector:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi

@@ -80,6 +80,9 @@ spec:
                   cpu: "500m"
                   memory: 1Gi
                 limits:
+                  # caps the node's CPU use: server + ML (3 cores) leave >= 1 of the 4 vCPUs to the system
+                  # (node saturation on 2026-11-04 restarted Traefik, CNPG, ...). Observed peak: ~1.6 cores.
+                  cpu: "2"
                   memory: 3Gi
     machine-learning:
       controllers:
@@ -88,6 +91,9 @@ spec:
             main:
               resources:
                 requests:
+                  cpu: 100m
                   memory: 1Gi
                 limits:
+                  # observed use ~0.6 cores; batch work, the first to slow down
+                  cpu: "1"
                   memory: 2Gi

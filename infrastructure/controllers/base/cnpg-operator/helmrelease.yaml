@@ -17,6 +17,11 @@ spec:
   values:
     crds:
       create: true
+    # guaranteed CPU share when the node is saturated (no limit)
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
     webhook:
       startupProbe:
         # the chart's 6 x 5s = 30s is too short: the operator needs ~20s to start on this node and then

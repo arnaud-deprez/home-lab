@@ -33,3 +33,28 @@ patches:
         name: local-path-storage
         labels:
           pod-security.kubernetes.io/enforce: privileged
+  # CPU request so it keeps its share when the node is saturated, and probe timeouts above the 1s default:
+  # it was restarted ~27 times on probe timeouts during node CPU stalls (2026-11-04)
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: local-path-provisioner
+        namespace: local-path-storage
+      spec:
+        template:
+          spec:
+            containers:
+              - name: local-path-provisioner
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 32Mi
+                startupProbe:
+                  timeoutSeconds: 5
+                livenessProbe:
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+                readinessProbe:
+                  timeoutSeconds: 5
+                  failureThreshold: 6

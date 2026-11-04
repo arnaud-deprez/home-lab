@@ -22,3 +22,15 @@ spec:
     ingressClass:
       enabled: true
       isDefaultClass: true
+    # A CPU request guarantees Traefik its share when the node is saturated (no limit: it must never be throttled).
+    # Probes: the chart's 2s timeout / 3 failures restarted it ~70 times in 38h during node CPU stalls (2026-11-04).
+    resources:
+      requests:
+        cpu: 200m
+        memory: 128Mi
+    livenessProbe:
+      timeoutSeconds: 5
+      failureThreshold: 6
+    readinessProbe:
+      timeoutSeconds: 5
+      failureThreshold: 3
