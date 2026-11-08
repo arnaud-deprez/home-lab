@@ -223,8 +223,14 @@ the one-time sign-in links last **one hour**: generate each user's link when the
 How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
 
 - `rclone-mount.yaml`: a privileged Deployment mounts the crypt remote at `/var/mnt/rclone` (the Talos
-  directory volume) with bidirectional propagation. Immich bind-mounts `library` and `upload` from it
-  (`HostToContainer`) and an init container waits for the marker object `.mounted`. The marker is created once, with the bucket:
+  directory volume) with bidirectional propagation. Immich bind-mounts the whole mount at `/mnt/rclone`
+  (`HostToContainer`) and an init container waits for the marker object `.mounted`, then makes `/data/library`
+  and `/data/upload` symlinks into it (`/data` itself is the local volume). **Do not bind-mount `library` and
+  `upload` separately:** Immich moves every new upload from `upload/` to `library/` (storage template), and
+  `rename()` between two mount points fails with `EXDEV`, so Immich falls back to copying the file through the
+  FUSE mount (download, cache, upload, delete) instead of a server-side S3 rename. This applies to any cluster
+  where the two folders sit on different volumes; on one volume (laptop, tierhive) the move is a plain rename.
+  The marker is created once, with the bucket:
   `echo ok | rclone rcat crypt:.mounted` (any content; only its existence is tested). A new bucket needs it again,
   because backups and the disk copy do not contain it.
 - `rclone-secret.sops.yaml`: the rclone config as environment variables. The S3 server rejects V4

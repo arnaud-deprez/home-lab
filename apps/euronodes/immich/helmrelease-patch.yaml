@@ -24,29 +24,18 @@ spec:
                 - immich.vps.powple.com
               secretName: immich-tls
       persistence:
-        rclone-library:
-          type: hostPath
-          hostPath: /var/mnt/rclone/library
-          hostPathType: Directory
-          globalMounts:
-            - path: /data/library
-              mountPropagation: HostToContainer
-        rclone-upload:
-          type: hostPath
-          hostPath: /var/mnt/rclone/upload
-          hostPathType: Directory
-          globalMounts:
-            - path: /data/upload
-              mountPropagation: HostToContainer
-        rclone-sentinel:
+        # The whole rclone mount, bound once. Immich moves new uploads from upload/ to library/ (storage
+        # template): bound as two separate mount points (/data/library, /data/upload) rename() fails with
+        # EXDEV and Immich copies every file through the FUSE mount instead (download + cache + upload +
+        # delete). Both folders must be reached through ONE mount so the move is a server-side S3 rename:
+        # /data/library and /data/upload are symlinks into it, created by the wait-mount init container.
+        rclone:
           type: hostPath
           hostPath: /var/mnt/rclone
           hostPathType: Directory
-          advancedMounts:
-            main:
-              wait-mount:
-                - path: /mnt/rclone
-                  mountPropagation: HostToContainer
+          globalMounts:
+            - path: /mnt/rclone
+              mountPropagation: HostToContainer
       controllers:
         main:
           initContainers:
@@ -57,7 +46,16 @@ spec:
               command:
                 - sh
                 - -c
-                - until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
+                - |
+                  until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
+                  # /data is the local volume: library/ and upload/ there are symlinks into the S3 mount.
+                  # Replace the empty directories left by the former bind mounts, never a non-empty one.
+                  for d in library upload; do
+                    if [ -d /data/$d ] && [ ! -L /data/$d ]; then
+                      rmdir /data/$d || { echo "/data/$d is not empty: not replacing it"; exit 1; }
+                    fi
+                    ln -sfn /mnt/rclone/$d /data/$d
+                  done
           containers:
             main:
               # The API and the job workers share one process: during imports (transcoding, face
