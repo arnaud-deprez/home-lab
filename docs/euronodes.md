@@ -74,6 +74,7 @@ talosctl gen config --with-secrets <(sops -d talos/euronodes/secrets.sops.yaml) 
 | `VolumeConfig` `STATE` and `EPHEMERAL` (40 GB), `UserVolumeConfig` `local-path-provisioner` | Layout, each with `encryption: luks2` and `nodeID` key |
 | `UserVolumeConfig` `rclone` (`volumeType: directory`) | A writable `/var/mnt/rclone` for the rclone FUSE mount (`/var/mnt` is read-only for the kubelet) |
 | `RegistryMirrorConfig` `registry.k8s.io` | See _Google registry block_ |
+| `EtcFileConfig` `gai.conf`, `SysctlConfig` (`disable_ipv6`) | Prefer or force IPv4: see _Google registry block_ |
 
 Encryption can only be set when a volume is created; changing it later means wiping the volume.
 The node-ID key derives from the VM UUID: it protects against a copied disk or snapshot, **not**
@@ -139,8 +140,33 @@ the control-plane images are cached on the node, but a **Kubernetes or Talos upg
 (CSI sidecars) cannot start. Raise it with EuroNodes, and plan a mirror (for example copying the
 images to `ghcr.io`) before an upgrade.
 
-Take a restic backup and an etcd snapshot before every Talos upgrade (single node, no fallback).
-Check the Talos 1.14 docs for the exact `talosctl upgrade` options that keep data on one node.
+**Probable cause: IPv6.** EuroNodes' diagnosis is that the 403 comes from the node reaching the registry over
+IPv6 (their IPv6 range is blocked, while IPv4 works). The connection succeeds, so Go's resolver never falls
+back to IPv4. The patch therefore carries two things: a `gai.conf` that prefers IPv4 (EuroNodes' suggestion;
+it may have no effect, because Talos and containerd are static Go binaries and do not read `/etc/gai.conf`),
+and a `SysctlConfig` that sets `net/ipv6/conf/{all,default}/disable_ipv6` to `1` (slash form, as in the
+[Talos 1.14 reference example](https://docs.siderolabs.com/talos/v1.14/reference/configuration/runtime/sysctlconfig)). **Not yet verified on the
+node.** After applying, check `talosctl read /proc/sys/net/ipv6/conf/all/disable_ipv6` (expect `1`; reboot
+if the sysctl is not live) and that an image pull from `registry.k8s.io` works. Do not use the
+`ipv6.disable=1` kernel argument: it needs an upgrade and has broken Talos boots in old releases.
+
+### Upgrading Talos
+
+Lessons from the v1.14.2 → v1.14.5 upgrade, which left the cluster down for a while:
+
+- Take a restic backup and an etcd snapshot first (single node, no fallback).
+- Run `talosctl upgrade --drain=false --image factory.talos.dev/metal-installer/$SCHEMATIC:$VERSION`.
+  The drain step dials the node's public `:6443`, which is closed (Kubernetes is reachable over Tailscale
+  only), so it fails, and draining a single node is pointless anyway. There is no `--preserve` flag in 1.14:
+  state and ephemeral data are kept by default.
+- A new Talos pulls a new default **etcd** image (`registry.k8s.io/etcd:<version>`, not cached on the node).
+  If the registry block is still in effect, etcd stays in "Preparing" and the API server never comes up.
+  Make sure image pulls work (above) before upgrading.
+- Never run `talosctl apply-config` without `--config-patch @talos/euronodes/patch.yaml`. The generated
+  `controlplane.yaml` has no `STATE` encryption, so the node reboots without its config and cannot unlock its
+  `STATE` volume (`volume is encrypted, but no encryption config provided`).
+- Afterwards, update the `installer.image` version in `talos/euronodes/controlplane.yaml` and `worker.yaml`
+  and `TALOS_VERSION` above: `upgrade` does not change the stored machine config.
 
 ## Flux
 

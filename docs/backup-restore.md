@@ -252,6 +252,10 @@ and was tested end to end on 2026-10-26.
    at all and plays from the original, so only videos Immich had transcoded are affected. Resume the jobs and Flux
    (section 5, top).
 
+> **Rebuilding a whole cluster?** 5.2 restores only Immich's *database*. Immich's `profile` pictures and the
+> `backups` folder (the nightly dumps) come back with step 5 of section 5.5, and the thumbnails and encoded video
+> must be regenerated (end of 5.2). After a rebuild, check that `/data/profile` holds more than the `.immich` marker.
+
 ### 5.3 The Pocket ID database or data is lost
 
 1. Pause the jobs (above). Scale Pocket ID down: `kubectl -n identity scale deploy/pocket-id --replicas=0`.
@@ -263,12 +267,25 @@ and was tested end to end on 2026-10-26.
    cp -a /restore/data/uploads/. /data/uploads/
    exit
    ```
-4. Postgres container: replace the database contents with the dump (this clears what a freshly started Pocket ID created):
+   The `uploads` folder holds the logos and profile pictures; check `find /data/uploads -type f | wc -l` afterwards.
+4. Replace the database contents with the dump. If Pocket ID **already started on an empty database** (always true
+   after a rebuild), it has created every table of its current schema, including ones the older dump does not know.
+   `pg_restore --clean` only drops what is in the dump, so those tables stay behind while the restored
+   `francis_metadata` says `migrations-version` is older. Pocket ID then crash-loops with
+   `failed to perform migration '12-management.sql': relation "francis_workflow_events" already exists`
+   (seen on 2026-11-12, v2.19.2). So reset the `public` schema first, as the PostgreSQL superuser, and restore
+   **without** `--clean`. The dump re-creates the `citext` and `pgcrypto` extensions that live in that schema:
    ```sh
+   kubectl -n identity exec pocket-id-database-1 -c postgres -- psql -U postgres -d app -v ON_ERROR_STOP=1 \
+     -c "DROP SCHEMA public CASCADE" -c "CREATE SCHEMA public AUTHORIZATION app"
    kubectl -n identity exec -it restic-shell -c postgres -- sh
-   pg_restore --clean --if-exists --no-owner --no-privileges -d "$DB_URI" /restore/dump/pocket-id.dump
+   pg_restore --no-owner --no-privileges --exit-on-error -d "$DB_URI" /restore/dump/pocket-id.dump
    ```
-5. Delete the shell, scale Pocket ID up (`--replicas=1`), sign in with your passkey, resume the jobs.
+   Check `psql -c "select count(*) from users"` and that `francis_workflow_events` is absent until Pocket ID has
+   migrated. A failed attempt is safe to repeat: reset the schema again. (For a database that is merely damaged and
+   whose Pocket ID never ran a newer version, `pg_restore --clean --if-exists …` is enough.)
+5. Delete the shell, scale Pocket ID up (`--replicas=1`), check `kubectl -n identity logs deploy/pocket-id` shows no
+   migration error, sign in with your passkey, resume the jobs.
 
 The passkeys live in the database, so they come back with it. They work as long as the hostname is unchanged.
 

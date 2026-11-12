@@ -34,6 +34,8 @@ kind: UnattendedInstallConfig
 provisioning:
   diskSelector:
     match: disk.dev_path == "/dev/sda"
+  # Never wipe the disk on (re)install: the default in 1.14 is true.
+  wipe: false
 ---
 apiVersion: v1alpha1
 kind: VolumeConfig
@@ -73,13 +75,13 @@ encryption:
       nodeID: {}
 ---
 apiVersion: v1alpha1
-kind: RegistryMirrorConfig
-name: registry.k8s.io
-endpoints:
-  - url: https://europe-west4-docker.pkg.dev/v2/k8s-artifacts-prod/images
-    overridePath: true
----
-apiVersion: v1alpha1
 kind: UserVolumeConfig
 name: rclone
 volumeType: directory
+---
+# disable ipv6 because ipv6 is blocked on registry.k8s.io and some other registries
+apiVersion: v1alpha1
+kind: SysctlConfig
+params:
+  net/ipv6/conf/all/disable_ipv6: "1"
+  net/ipv6/conf/default/disable_ipv6: "1"
