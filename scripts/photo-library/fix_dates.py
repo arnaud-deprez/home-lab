@@ -84,11 +84,16 @@ def _read_csv(path: Path) -> list:
 def apply_plan(plan_csv: Path, undo_csv: Path) -> list:
     """Write the planned dates. Writes the undo log first. Returns the failed paths."""
     plan_csv = Path(plan_csv)
-    rows = [r for r in _read_csv(plan_csv)
-            if r["rule"] not in ("keep-exif", "skip-no-year") and r["writable"] == "True" and r["new_date"]]
+    all_rows = [r for r in _read_csv(plan_csv)
+                if r["rule"] not in ("keep-exif", "skip-no-year") and r["new_date"]]
+    rows = [r for r in all_rows if r["writable"] == "True"]
+    # formats exiftool cannot write (avi, mpg, wmv...): only the file modification date can carry the fix,
+    # and only where it is wrong (rule from-mtime means it is already the right date)
+    mtime_rows = [r for r in all_rows if r["writable"] != "True" and r["rule"] != "from-mtime"]
     paths = [Path(r["path"]) for r in rows]
+    mtime_paths = [Path(r["path"]) for r in mtime_rows]
     plan_time = plan_csv.stat().st_mtime
-    newer = [p for p in paths if p.stat().st_mtime > plan_time]
+    newer = [p for p in paths + mtime_paths if p.stat().st_mtime > plan_time]
     if newer:
         raise RuntimeError(f"plan is stale: {len(newer)} files changed after it was made (e.g. {newer[0]})")
     old = read_raw(paths)
@@ -97,6 +102,8 @@ def apply_plan(plan_csv: Path, undo_csv: Path) -> list:
         w.writeheader()
         for p in paths:
             w.writerow({"path": str(p), **old[p], "mtime": repr(p.stat().st_mtime)})
+        for p in mtime_paths:
+            w.writerow({"path": str(p), "mtime": repr(p.stat().st_mtime)})
         fh.flush()
         os.fsync(fh.fileno())
     mtimes = {p: p.stat().st_mtime for p in paths}
@@ -105,6 +112,9 @@ def apply_plan(plan_csv: Path, undo_csv: Path) -> list:
     for p in paths:  # -P keeps mtime; restore anyway if something moved it
         if p.stat().st_mtime != mtimes[p]:
             os.utime(p, (mtimes[p], mtimes[p]))
+    for r in mtime_rows:
+        ts = datetime.strptime(r["new_date"], ISO).timestamp()
+        os.utime(r["path"], (ts, ts))
     return failed
 
 

@@ -77,6 +77,20 @@ class ApplyTest(unittest.TestCase):
             apply_plan(self.plan, bad_undo)
         self.assertEqual(self.sha(self.jpg), before)
 
+    def test_unwritable_video_with_a_wrong_date_gets_its_modification_date_set_and_undone(self):
+        clip = self.root / "clip.avi"
+        clip.write_bytes(b"RIFF....")
+        set_mtime(clip, datetime(2009, 2, 9, 21, 36, 28))
+        write_plan(self.plan, [{"path": clip, "new_date": "2007-02-09T21:36:28",
+                                "rule": "mtime-day-folder-year", "writable": False}])
+        os.utime(self.plan, (datetime(2030, 1, 1).timestamp(),) * 2)
+        before = self.sha(clip)
+        self.assertEqual(apply_plan(self.plan, self.undo), [])
+        self.assertEqual(datetime.fromtimestamp(clip.stat().st_mtime), datetime(2007, 2, 9, 21, 36, 28))
+        self.assertEqual(self.sha(clip), before)
+        undo_changes(self.undo)
+        self.assertEqual(datetime.fromtimestamp(clip.stat().st_mtime), datetime(2009, 2, 9, 21, 36, 28))
+
     def test_stale_plan_is_refused(self):
         os.utime(self.plan, (datetime(2000, 1, 1).timestamp(),) * 2)
         before = self.sha(self.jpg)

@@ -50,6 +50,7 @@ Rule per file, first match wins (the folder year is the `YYYY` at the start of t
 | `jan1-seq` | no usable modification date, or one shared by 20+ files of the album with a wrong year (placeholder) | 1 January of the folder year, 12:00:00 + 1 s per file in filename order |
 | `skip-no-year` | folder name has no `YYYY ` prefix | not touched, listed in the report |
 
-`avi`, `mpg`, `mts` (and `bmp`, `wmv`) cannot be written by exiftool: they are listed as `not-writable` and keep their
-modification date, which Immich uses. They are not re-encoded (Immich transcodes them for playback). Values that were
+`avi`, `mpg`, `mts` (and `bmp`, `wmv`) cannot be written by exiftool: they are listed as `not-writable`. Their date is the file
+modification date, which Immich uses; `apply` sets it only when it is wrong (the file's content is untouched, the old
+value goes in the undo log). They are not re-encoded (Immich transcodes them for playback). Values that were
 a zero date (`0000:00:00`) cannot be written back by `undo`; they are reported. The hard drive holds the originals.
