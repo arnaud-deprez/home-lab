@@ -29,6 +29,7 @@ Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and 
 | Ingress | Traefik terminates TLS on the node (hostPort 80/443); cert-manager, one Let's Encrypt certificate per host over HTTP-01 |
 | Domain | `*.vps.powple.com` (hosts live in `apps/euronodes/*`; see _Changing the public domain_ before changing it) |
 | Immich originals | `library` and `upload` on EuroNodes S3 through an rclone-crypt mount; everything else local |
+| Photo archive | `external/` on the same S3 mount, read-only external libraries in Immich ([`immich/photo-external-library.md`](immich/photo-external-library.md)) |
 | Backups | restic to a Hetzner Storage Box, one repository per app |
 
 ## Provision the VM
@@ -218,6 +219,7 @@ the one-time sign-in links last **one hour**: generate each user's link when the
 | Data | Where |
 | ---- | ----- |
 | `library`, `upload` (originals) | EuroNodes S3 bucket `home`, prefix `immich/`, through rclone crypt (client-side encrypted, file names too) |
+| `external` (curated photo archive, never edited by Immich) | Same bucket, prefix and crypt: `immich/external/`, seen as `/data/external` (symlink created by the same init container, with a `.keep` marker because S3 has no empty folders); see [`immich/photo-external-library.md`](immich/photo-external-library.md) |
 | `profile`, `backups` (Immich's nightly DB dumps), `thumbs`, `encoded-video`, ML cache, Postgres | local `local-path` |
 
 How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):

@@ -48,9 +48,13 @@ spec:
                 - -c
                 - |
                   until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
-                  # /data is the local volume: library/ and upload/ there are symlinks into the S3 mount.
+                  # external/ holds the read-only archive (external libraries, docs/immich/photo-external-library.md). S3 has
+                  # no empty directories, so keep a marker file: the symlink target and the restic path must exist.
+                  mkdir -p /mnt/rclone/external
+                  [ -e /mnt/rclone/external/.keep ] || echo keep > /mnt/rclone/external/.keep
+                  # /data is the local volume: library/, upload/ and external/ there are symlinks into the S3 mount.
                   # Replace the empty directories left by the former bind mounts, never a non-empty one.
-                  for d in library upload; do
+                  for d in library upload external; do
                     if [ -d /data/$d ] && [ ! -L /data/$d ]; then
                       rmdir /data/$d || { echo "/data/$d is not empty: not replacing it"; exit 1; }
                     fi

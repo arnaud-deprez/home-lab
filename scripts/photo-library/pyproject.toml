@@ -1,0 +1,9 @@
+[project]
+name = "photo-library"
+version = "0.1.0"
+description = "Date fixing and album listing for the curated photo archive imported into Immich"
+requires-python = ">=3.13"
+dependencies = []   # standard library only; exiftool and rclone are external programs (see the runbook)
+
+[tool.uv]
+package = false     # scripts, not an installable package
