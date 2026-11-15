@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fix_dates import build_plan
 from photolib.config import Config, Library
-from tests.helpers import make_jpeg
+from tests.helpers import make_jpeg, read_csv
 
 NOW = datetime(2026, 11, 15)
 
@@ -48,7 +48,7 @@ class PlanTest(unittest.TestCase):
         before = self.snapshot()
         counts = build_plan(self.cfg, 1, self.out, NOW)
         self.assertEqual(before, self.snapshot())
-        rows = {Path(r["path"]).name: r for r in csv.DictReader(open(self.out / "plan.csv", encoding="utf-8"))}
+        rows = {Path(r["path"]).name: r for r in read_csv(self.out / "plan.csv")}
         self.assertEqual(rows["a.jpg"]["rule"], "keep-exif")
         self.assertEqual(rows["b.jpg"]["rule"], "from-mtime")
         self.assertEqual(rows["b.jpg"]["new_date"], "2009-07-03T09:00:00")
@@ -64,7 +64,7 @@ class PlanTest(unittest.TestCase):
             f = make_jpeg(album / f"img{i:02d}.jpg", zero=True)
             set_mtime(f, datetime(2001, 12, 31, 22))
         build_plan(self.cfg, 1, self.out, NOW)
-        rows = {Path(r["path"]).name: r for r in csv.DictReader(open(self.out / "plan.csv", encoding="utf-8"))}
+        rows = {Path(r["path"]).name: r for r in read_csv(self.out / "plan.csv")}
         self.assertEqual(rows["img00.jpg"]["rule"], "jan1-seq")
         self.assertEqual(rows["img00.jpg"]["new_date"], "2005-01-01T12:00:00")
         self.assertEqual(rows["img24.jpg"]["new_date"], "2005-01-01T12:00:24")

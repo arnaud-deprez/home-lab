@@ -47,3 +47,58 @@ def read_dates(paths: list) -> dict:
             exif = next((d for d in (_parse(row.get(t)) for t in _TAGS) if d), None)
             result[p] = ExifInfo(exif, Path(p).suffix.lower() not in NOT_WRITABLE)
     return result
+
+
+VIDEO_EXT = {".mov", ".mp4", ".m4v", ".3gp"}
+RAW_TAGS = ("DateTimeOriginal", "CreateDate", "MediaCreateDate", "TrackCreateDate")
+_WRITE_COMMON = ["-P", "-overwrite_original", "-m", "-q", "-api", "QuickTimeUTC=1",
+                 "-charset", "filename=UTF8"]
+
+
+def tags_for(path: Path) -> tuple:
+    if Path(path).suffix.lower() in VIDEO_EXT:
+        return ("CreateDate", "MediaCreateDate", "TrackCreateDate")
+    return ("DateTimeOriginal", "CreateDate")
+
+
+def read_raw(paths: list) -> dict:
+    """Raw tag strings as stored (for the undo log); missing tags are absent."""
+    result = {}
+    for i in range(0, len(paths), _BATCH):
+        batch = paths[i:i + _BATCH]
+        cmd = (["exiftool", "-json", "-q", "-m", "-api", "QuickTimeUTC=1", "-charset", "filename=UTF8"]
+               + [f"-{t}" for t in RAW_TAGS] + [str(p) for p in batch])
+        out = subprocess.run(cmd, capture_output=True, text=True).stdout
+        rows = {r["SourceFile"]: r for r in (json.loads(out) if out.strip() else [])}
+        for p in batch:
+            row = rows.get(str(p), {})
+            result[p] = {t: str(row[t]) for t in RAW_TAGS if t in row}
+    return result
+
+
+def set_tags(settings: dict) -> None:
+    """settings: path -> {tag: value or None (delete)}. One exiftool run per batch via an argfile."""
+    import os
+    import tempfile
+    items = list(settings.items())
+    for i in range(0, len(items), _BATCH):
+        lines = []
+        for p, tags in items[i:i + _BATCH]:
+            for t, v in tags.items():
+                lines.append(f"-{t}={'' if v is None else v}")
+            lines += [str(p), "-execute"]
+        with tempfile.NamedTemporaryFile("w", suffix=".args", delete=False, encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+        try:
+            subprocess.run(["exiftool", "-charset", "exif=UTF8", "-@", fh.name, "-common_args"]
+                           + _WRITE_COMMON, capture_output=True, text=True)
+        finally:
+            os.unlink(fh.name)
+
+
+def write_dates(changes: dict) -> list:
+    """changes: path -> new datetime. Returns the paths whose date did not read back as written."""
+    fmt = "%Y:%m:%d %H:%M:%S"
+    set_tags({p: {t: dt.strftime(fmt) for t in tags_for(p)} for p, dt in changes.items()})
+    back = read_dates(list(changes))
+    return [p for p, dt in changes.items() if back[p].exif != dt]
