@@ -40,6 +40,16 @@ class ChooseDateTest(unittest.TestCase):
     def test_future_mtime_falls_back_to_jan1(self):
         self.assertEqual(choose(None, datetime(2030, 1, 1)).rule, "jan1-seq")
 
+    def test_placeholder_mtime_day_is_treated_as_invalid(self):
+        mtime = datetime(2001, 12, 31, 22)
+        d = choose_date(None, mtime, 2009, 4, NOW, placeholder_days=frozenset({mtime.date()}))
+        self.assertEqual((d.rule, d.date), ("jan1-seq", datetime(2009, 1, 1, 12, 0, 4)))
+
+    def test_placeholder_day_does_not_override_a_plausible_mtime(self):
+        mtime = datetime(2009, 5, 5, 10)
+        d = choose_date(None, mtime, 2009, 0, NOW, placeholder_days=frozenset({mtime.date()}))
+        self.assertEqual(d.rule, "from-mtime")
+
     def test_no_folder_year_is_skipped(self):
         d = choose_date(datetime(2009, 1, 1), datetime(2009, 1, 1), None, 0, NOW)
         self.assertEqual((d.rule, d.date), ("skip-no-year", None))

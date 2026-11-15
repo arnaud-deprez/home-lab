@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from photolib.config import Config, load_config
-from photolib.dates import choose_date
+from photolib.dates import PLACEHOLDER_MIN_FILES, choose_date
 from photolib.exif import read_dates
 from photolib.scope import iter_albums, nfc
 
@@ -32,6 +32,14 @@ def _files(album_path: Path, ignore_globs: list) -> list:
     return sorted(files, key=lambda p: nfc(str(p.relative_to(album_path))))
 
 
+def _placeholder_days(mtimes, folder_year) -> frozenset:
+    """Days (with a year far from the folder's) that many files of one album share."""
+    if folder_year is None:
+        return frozenset()
+    days = Counter(m.date() for m in mtimes if abs(m.year - folder_year) > 1)
+    return frozenset(d for d, n in days.items() if n >= PLACEHOLDER_MIN_FILES)
+
+
 def build_plan(cfg: Config, phase: int, out: Path, now: Optional[datetime] = None) -> Counter:
     now = now or datetime.now()
     out.mkdir(parents=True, exist_ok=True)
@@ -42,10 +50,12 @@ def build_plan(cfg: Config, phase: int, out: Path, now: Optional[datetime] = Non
         for album in iter_albums(cfg, phase):
             files = _files(album.path, cfg.ignore_globs)
             infos = read_dates(files)
+            mtimes = {p: datetime.fromtimestamp(p.stat().st_mtime).replace(microsecond=0) for p in files}
+            placeholders = _placeholder_days(mtimes.values(), album.year)
             for seq, p in enumerate(files):
                 info = infos[p]
-                mtime = datetime.fromtimestamp(p.stat().st_mtime).replace(microsecond=0)
-                d = choose_date(info.exif, mtime, album.year, seq, now)
+                mtime = mtimes[p]
+                d = choose_date(info.exif, mtime, album.year, seq, now, placeholders)
                 counts[(album.library, d.rule)] += 1
                 if not info.writable:
                     counts[(album.library, "not-writable")] += 1

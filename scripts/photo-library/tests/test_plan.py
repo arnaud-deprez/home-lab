@@ -58,6 +58,17 @@ class PlanTest(unittest.TestCase):
         self.assertNotIn(".DS_Store", rows)
         self.assertEqual(counts[("Shared", "keep-exif")], 1)
 
+    def test_many_files_sharing_a_wrong_mtime_day_fall_back_to_jan1_in_filename_order(self):
+        album = self.root / "Shared" / "2005 - placeholder"
+        for i in range(25):
+            f = make_jpeg(album / f"img{i:02d}.jpg", zero=True)
+            set_mtime(f, datetime(2001, 12, 31, 22))
+        build_plan(self.cfg, 1, self.out, NOW)
+        rows = {Path(r["path"]).name: r for r in csv.DictReader(open(self.out / "plan.csv", encoding="utf-8"))}
+        self.assertEqual(rows["img00.jpg"]["rule"], "jan1-seq")
+        self.assertEqual(rows["img00.jpg"]["new_date"], "2005-01-01T12:00:00")
+        self.assertEqual(rows["img24.jpg"]["new_date"], "2005-01-01T12:00:24")
+
 
 if __name__ == "__main__":
     unittest.main()

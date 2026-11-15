@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
+PLACEHOLDER_MIN_FILES = 20  # same wrong mtime day on this many files of an album = not a real date
+
 
 @dataclass
 class Decision:
@@ -15,14 +17,14 @@ def _near(year: int, folder_year: int) -> bool:
 
 
 def choose_date(exif: Optional[datetime], mtime: datetime, folder_year: Optional[int],
-                seq: int, now: datetime) -> Decision:
+                seq: int, now: datetime, placeholder_days: frozenset = frozenset()) -> Decision:
     if folder_year is None:
         return Decision(None, "skip-no-year")
     if exif is not None and _near(exif.year, folder_year):
         return Decision(exif, "keep-exif")
     if _near(mtime.year, folder_year):
         return Decision(mtime, "from-mtime")
-    if 1990 <= mtime.year <= now.year:
+    if 1990 <= mtime.year <= now.year and mtime.date() not in placeholder_days:
         try:
             moved = mtime.replace(year=folder_year)
         except ValueError:  # 29 February onto a non-leap year
