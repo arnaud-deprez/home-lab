@@ -32,7 +32,9 @@ Defined in [`scripts/photo-library/config.json`](../../scripts/photo-library/con
 Immich trusts the EXIF capture date; many old files have a wrong or empty one. Dates are written into the files
 with exiftool (always `-P`: the modification time is kept, it is the fallback date).
 
-Requirements: `brew install uv exiftool` (uv pins Python 3.13 and the empty lockfile, `scripts/photo-library/uv.lock`; the scripts use
+Requirements: `brew install uv exiftool` and **exiftool 13.55** (check with `exiftool -ver`; `brew pin exiftool` keeps Homebrew
+from upgrading it; the date writing and the repair of damaged EXIF blocks were developed and tested against this version,
+so re-run the tests after any change) (uv pins Python 3.13 and the empty lockfile, `scripts/photo-library/uv.lock`; the scripts use
 the standard library only, so `uv run` needs no install step). Tests: `uv run python -m unittest discover -s tests`.
 
 ```sh
