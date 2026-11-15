@@ -177,7 +177,7 @@ Immich (upload it again) rather than into the bucket by hand: Immich also needs 
    echo ok | rclone rcat crypt:.mounted            # marker Immich and the backup job wait for
    ```
    The `.immich` marker files inside `library/` and `upload/` are on the disk and come back with the folders. The
-   `.mounted` marker at the root of the bucket is **not** (the script only copies `library` and `upload`, and the
+   `.mounted` marker at the root of the bucket is **not** (the script only copies `library`, `upload` and `external`, and the
    restic snapshots do not hold it either). It is a tiny file whose content does not matter, created once with the
    bucket ([`euronodes.md`](euronodes.md)); without it Immich waits forever and the nightly job fails.
 4. Check the count and size match: `rclone size crypt:library` against `rclone size /Volumes/Backup/immich/library`.
