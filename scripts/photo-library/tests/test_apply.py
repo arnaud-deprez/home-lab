@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fix_dates import PLAN_COLUMNS, apply_plan, undo_changes
 from photolib.exif import read_dates
-from tests.helpers import make_jpeg, read_csv, make_mov
+from tests.helpers import make_corrupt_exif_jpeg, make_jpeg, make_mov, read_csv
 
 
 def set_mtime(p: Path, dt: datetime):
@@ -90,6 +90,16 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(self.sha(clip), before)
         undo_changes(self.undo)
         self.assertEqual(datetime.fromtimestamp(clip.stat().st_mtime), datetime(2009, 2, 9, 21, 36, 28))
+
+    def test_unrepairable_jpeg_is_reported_and_left_untouched(self):
+        bad = make_corrupt_exif_jpeg(self.root / "damaged.jpg")
+        set_mtime(bad, datetime(2009, 7, 3, 9))
+        before = self.sha(bad)
+        write_plan(self.plan, [{"path": bad, "new_date": "2005-10-01T12:00:01", "rule": "override-seq", "writable": True}])
+        os.utime(self.plan, (datetime(2030, 1, 1).timestamp(),) * 2)
+        self.assertEqual(apply_plan(self.plan, self.undo), [bad])
+        self.assertEqual(self.sha(bad), before)
+        self.assertEqual(datetime.fromtimestamp(bad.stat().st_mtime), datetime(2009, 7, 3, 9))
 
     def test_stale_plan_is_refused(self):
         os.utime(self.plan, (datetime(2000, 1, 1).timestamp(),) * 2)

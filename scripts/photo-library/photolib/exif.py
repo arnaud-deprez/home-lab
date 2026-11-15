@@ -96,9 +96,26 @@ def set_tags(settings: dict) -> None:
             os.unlink(fh.name)
 
 
+def rebuild_exif(paths: list) -> None:
+    """Copy every tag into a freshly built metadata block (drops damaged directories such as a truncated
+    InteropIFD that make exiftool refuse to write). The image data is not touched."""
+    for p in paths:
+        subprocess.run(["exiftool", *_WRITE_COMMON, "-all=", "-tagsfromfile", "@", "-all:all", "-unsafe",
+                        "-icc_profile", str(p)], capture_output=True, text=True)
+
+
 def write_dates(changes: dict) -> list:
-    """changes: path -> new datetime. Returns the paths whose date did not read back as written."""
+    """changes: path -> new datetime. Returns the paths whose date did not read back as written.
+    A file that refuses the write gets its metadata block rebuilt once, then the write is retried."""
     fmt = "%Y:%m:%d %H:%M:%S"
-    set_tags({p: {t: dt.strftime(fmt) for t in tags_for(p)} for p, dt in changes.items()})
-    back = read_dates(list(changes))
-    return [p for p, dt in changes.items() if back[p].exif != dt]
+
+    def attempt(items: dict) -> list:
+        set_tags({p: {t: dt.strftime(fmt) for t in tags_for(p)} for p, dt in items.items()})
+        back = read_dates(list(items))
+        return [p for p, dt in items.items() if back[p].exif != dt]
+
+    failed = attempt(changes)
+    if failed:
+        rebuild_exif(failed)
+        failed = attempt({p: changes[p] for p in failed})
+    return failed

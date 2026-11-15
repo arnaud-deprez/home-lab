@@ -42,3 +42,15 @@ def read_csv(path):
     import csv
     with open(path, encoding="utf-8", newline="") as fh:
         return list(csv.DictReader(fh))
+
+
+def make_corrupt_exif_jpeg(path: Path, date: str = "2009:08:01 10:00:00") -> Path:
+    """A JPEG whose InteropIFD claims 255 entries: exiftool refuses to write to it ('Truncated InteropIFD directory')."""
+    make_jpeg(path, date)
+    subprocess.run(["exiftool", "-q", "-overwrite_original", "-InteropIndex=R98", str(path)], check=True)
+    data = bytearray(path.read_bytes())
+    i = data.find(b"\x00\x02\x00\x01\x00\x02\x00\x00\x00\x04R98\x00")
+    assert i >= 0
+    data[i:i + 2] = b"\x00\xff"
+    path.write_bytes(bytes(data))
+    return path
