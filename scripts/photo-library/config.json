@@ -54,8 +54,10 @@
     ]
   },
   "date_overrides": {
-    "Shared/2007 - soirée départ vinz aout": "2007-08",
+    "Arnaud/2005 - Soirée départ vinz malte": "2005-10",
     "Arnaud/2005 - soirée vacance": "2005-08",
-    "Arnaud/2006 - TU": "2006-10"
+    "Arnaud/2006 - TU": "2006-10",
+    "Arnaud/2006 - retour de malte vinz": "2006-02",
+    "Shared/2007 - soirée départ vinz aout": "2007-08"
   }
 }
