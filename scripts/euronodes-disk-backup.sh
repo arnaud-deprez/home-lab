@@ -21,6 +21,7 @@ KEEP_RUNS=${KEEP_RUNS:-8}            # runs kept: archive of removed photos and 
 MAX_DUMP_AGE_DAYS=${MAX_DUMP_AGE_DAYS:-3}   # fail if the newest database dump on the Storage Box is older than this
 MAX_DELETE=${MAX_DELETE:-500}        # stop if one run would remove more photos than this (raise it on purpose)
 PHOTO_DIRS="library upload"          # Immich folders that live on the S3 mount
+OPTIONAL_PHOTO_DIRS="external"       # read-only archive: copied once it holds something, skipped while empty
 IMMICH_SECRET=$REPO_DIR/apps/euronodes/immich/restic-secret.sops.yaml
 POCKET_SECRET=$REPO_DIR/apps/euronodes/pocket-id/restic-secret.sops.yaml
 RCLONE_SECRET=$REPO_DIR/apps/euronodes/immich/rclone-secret.sops.yaml
@@ -65,6 +66,14 @@ while IFS= read -r kv; do export "$kv"; done < <(
 for d in $PHOTO_DIRS; do
   # An empty or unreachable source must never turn into "delete everything on the disk".
   rclone lsf "crypt:$d" --max-depth 1 | head -n 1 | grep -q . || die "crypt:$d is empty or unreachable: not touching the disk"
+done
+for d in $OPTIONAL_PHOTO_DIRS; do
+  # Only the marker file (or nothing) in it: skip it, so an unreachable source never empties the disk copy.
+  if [ "$(rclone lsf "crypt:$d" --max-depth 1 | grep -v '^\.keep$' | head -n 1 | wc -l | tr -d ' ')" = 1 ]; then
+    PHOTO_DIRS="$PHOTO_DIRS $d"
+  else
+    echo "NOTICE: crypt:$d is empty or unreachable: skipped"
+  fi
 done
 
 if [ -z "${SKIP_DISK_CHECK:-}" ] && [ -f "$STATE/photos.sha256" ]; then

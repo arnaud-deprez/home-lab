@@ -55,7 +55,7 @@ spec:
                     stale=yes
                   fi
                   r backup --host immich --tag immich --ignore-inode \
-                    /mnt/rclone/library /mnt/rclone/upload \
+                    /mnt/rclone/library /mnt/rclone/upload /mnt/rclone/external \
                     /immich/profile /immich/backups
                   r forget --host immich --tag immich --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 6
                   r check --read-data-subset=5%
