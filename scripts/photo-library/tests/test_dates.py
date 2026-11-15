@@ -6,8 +6,8 @@ from photolib.dates import choose_date
 NOW = datetime(2026, 11, 15, 12, 0, 0)
 
 
-def choose(exif, mtime, year=2009, seq=0):
-    return choose_date(exif, mtime, year, seq, NOW)
+def choose(exif, mtime, year=2009, seq=0, start=None):
+    return choose_date(exif, mtime, year, seq, NOW, fallback_start=start)
 
 
 class ChooseDateTest(unittest.TestCase):
@@ -49,6 +49,14 @@ class ChooseDateTest(unittest.TestCase):
         mtime = datetime(2009, 5, 5, 10)
         d = choose_date(None, mtime, 2009, 0, NOW, placeholder_days=frozenset({mtime.date()}))
         self.assertEqual(d.rule, "from-mtime")
+
+    def test_album_start_override_replaces_jan1(self):
+        d = choose(None, datetime(1970, 1, 1), seq=3, start=datetime(2009, 8, 1, 12))
+        self.assertEqual((d.rule, d.date), ("override-seq", datetime(2009, 8, 1, 12, 0, 3)))
+
+    def test_album_start_override_does_not_touch_good_dates(self):
+        d = choose(datetime(2009, 3, 3), datetime(2020, 1, 1), start=datetime(2009, 8, 1, 12))
+        self.assertEqual(d.rule, "keep-exif")
 
     def test_no_folder_year_is_skipped(self):
         d = choose_date(datetime(2009, 1, 1), datetime(2009, 1, 1), None, 0, NOW)

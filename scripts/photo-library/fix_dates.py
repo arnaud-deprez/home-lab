@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from photolib.config import Config, load_config
+from photolib.config import Config, load_config, parse_override
 from photolib.dates import PLACEHOLDER_MIN_FILES, choose_date
 from photolib.exif import RAW_TAGS, read_dates, read_raw, set_tags, write_dates
 from photolib.scope import iter_albums, nfc
@@ -53,10 +53,12 @@ def build_plan(cfg: Config, phase: int, out: Path, now: Optional[datetime] = Non
             infos = read_dates(files)
             mtimes = {p: datetime.fromtimestamp(p.stat().st_mtime).replace(microsecond=0) for p in files}
             placeholders = _placeholder_days(mtimes.values(), album.year)
+            override = cfg.date_overrides.get(f"{album.library}/{album.name}")
+            start = parse_override(override) if override else None
             for seq, p in enumerate(files):
                 info = infos[p]
                 mtime = mtimes[p]
-                d = choose_date(info.exif, mtime, album.year, seq, now, placeholders)
+                d = choose_date(info.exif, mtime, album.year, seq, now, placeholders, start)
                 counts[(album.library, d.rule)] += 1
                 if not info.writable:
                     counts[(album.library, "not-writable")] += 1

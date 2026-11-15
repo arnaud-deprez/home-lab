@@ -1,6 +1,8 @@
 """Scope configuration for the photo library tooling."""
 import json
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -19,6 +21,17 @@ class Config:
     libraries: list
     ignore_globs: list
     phases: dict
+    date_overrides: dict = field(default_factory=dict)  # "Library/album name" (NFC) -> "YYYY-MM[-DD]"
+
+
+def parse_override(value: str) -> datetime:
+    """'2007-08' -> 1 Aug 2007 12:00; '2007-08-15' -> 15 Aug 2007 12:00."""
+    for fmt in ("%Y-%m-%d", "%Y-%m"):
+        try:
+            return datetime.strptime(value, fmt).replace(hour=12)
+        except ValueError:
+            pass
+    raise ValueError(f"bad date override {value!r}: use YYYY-MM or YYYY-MM-DD")
 
 
 def load_config(path: Path) -> Config:
@@ -31,4 +44,5 @@ def load_config(path: Path) -> Config:
         ],
         ignore_globs=raw["ignore_globs"],
         phases={int(k): v for k, v in raw["phases"].items()},
+        date_overrides={unicodedata.normalize("NFC", k): v for k, v in raw.get("date_overrides", {}).items()},
     )

@@ -9,7 +9,7 @@ PLACEHOLDER_MIN_FILES = 20  # same wrong mtime day on this many files of an albu
 @dataclass
 class Decision:
     date: Optional[datetime]
-    rule: str  # keep-exif | from-mtime | mtime-day-folder-year | jan1-seq | skip-no-year
+    rule: str  # keep-exif | from-mtime | mtime-day-folder-year | jan1-seq | override-seq | skip-no-year
 
 
 def _near(year: int, folder_year: int) -> bool:
@@ -17,7 +17,8 @@ def _near(year: int, folder_year: int) -> bool:
 
 
 def choose_date(exif: Optional[datetime], mtime: datetime, folder_year: Optional[int],
-                seq: int, now: datetime, placeholder_days: frozenset = frozenset()) -> Decision:
+                seq: int, now: datetime, placeholder_days: frozenset = frozenset(),
+                fallback_start: Optional[datetime] = None) -> Decision:
     if folder_year is None:
         return Decision(None, "skip-no-year")
     if exif is not None and _near(exif.year, folder_year):
@@ -30,4 +31,6 @@ def choose_date(exif: Optional[datetime], mtime: datetime, folder_year: Optional
         except ValueError:  # 29 February onto a non-leap year
             moved = mtime.replace(year=folder_year, day=28)
         return Decision(moved, "mtime-day-folder-year")
+    if fallback_start is not None:
+        return Decision(fallback_start + timedelta(seconds=seq), "override-seq")
     return Decision(datetime(folder_year, 1, 1, 12) + timedelta(seconds=seq), "jan1-seq")

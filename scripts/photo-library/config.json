@@ -52,5 +52,10 @@
     "2": [
       "Amelie"
     ]
+  },
+  "date_overrides": {
+    "Shared/2007 - soirée départ vinz aout": "2007-08",
+    "Arnaud/2005 - soirée vacance": "2005-08",
+    "Arnaud/2006 - TU": "2006-10"
   }
 }
