@@ -32,12 +32,22 @@ Defined in [`scripts/photo-library/config.json`](../../scripts/photo-library/con
 Immich trusts the EXIF capture date; many old files have a wrong or empty one. Dates are written into the files
 with exiftool (always `-P`: the modification time is kept, it is the fallback date).
 
+Requirements: `brew install uv exiftool` (uv pins Python 3.13 and the empty lockfile, `scripts/photo-library/uv.lock`; the scripts use
+the standard library only, so `uv run` needs no install step). Tests: `uv run python -m unittest discover -s tests`.
+
 ```sh
 cd scripts/photo-library
-python3 fix_dates.py plan 1 --out ~/photo-plan-1     # dry run: report + ~/photo-plan-1/plan.csv, changes nothing
-python3 fix_dates.py apply ~/photo-plan-1/plan.csv   # writes ~/photo-plan-1/undo.csv FIRST, then the dates
-python3 fix_dates.py undo ~/photo-plan-1/undo.csv    # puts the old tags and modification times back
+uv run fix_dates.py plan 1 --out ~/photo-plan-1     # dry run: report + ~/photo-plan-1/plan.csv, changes nothing
+uv run fix_dates.py apply ~/photo-plan-1/plan.csv   # writes ~/photo-plan-1/undo.csv FIRST, then the dates
+uv run fix_dates.py undo ~/photo-plan-1/undo.csv    # puts the old tags and modification times back
+uv run list_albums.py 1                              # albums of a phase and any name collision
 ```
+
+Never run `apply` twice on the same folder: the second run would overwrite `undo.csv` with the values written by the
+first. To retry failures, build a plan with only those rows in a new folder (its own `undo.csv`).
+
+A JPEG whose EXIF block is damaged (old Nikon files: "Truncated InteropIFD directory") gets its metadata block rebuilt
+once (`-all= -tagsfromfile @ -all:all -unsafe`; the image data is not touched), then the date is written again.
 
 Rule per file, first match wins (the folder year is the `YYYY` at the start of the album folder name):
 

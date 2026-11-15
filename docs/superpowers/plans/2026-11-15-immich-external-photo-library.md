@@ -6,7 +6,7 @@
 
 **Architecture:** Python tooling on the user's Mac fixes dates in the files with exiftool (undo log, dry-run first) and lists the album set; rclone copies the tree into an `external/` prefix of the existing rclone-crypt S3 mount; Flux manifests expose it to immich-server at `/data/external`; a containerised folder-album tool creates and shares the albums. Only euronodes is touched now; the path convention lets other clusters opt in later.
 
-**Tech Stack:** Python 3 stdlib (`unittest`), exiftool, rclone, Kustomize/Flux, Immich API, `salvoxia/immich-folder-album-creator` (Docker).
+**Tech Stack:** Python 3.13 stdlib (`unittest`) run with `uv` (`scripts/photo-library/pyproject.toml`, `uv.lock`: `uv run python -m unittest discover -s tests`), exiftool, rclone, Kustomize/Flux, Immich API, `salvoxia/immich-folder-album-creator` (Docker).
 
 **Spec:** `docs/superpowers/specs/2026-11-15-immich-external-photo-library-design.md`
 
