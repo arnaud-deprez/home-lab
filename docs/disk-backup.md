@@ -20,6 +20,7 @@ backups. It is not a way to get yesterday's data back.
 ```
 <disk>/
   immich/library/, upload/       photo originals, as plain files (decrypted from the bucket)
+  immich/external/               the curated photo archive, once it holds photos (skipped while empty)
   immich-archive/<date>/…        photos removed or replaced since the previous run (see below)
   restic-immich/                 restic repo: Immich database dumps + profile pictures (last 8 runs)
   restic-pocket-id/              restic repo: Pocket ID database dump + data folder (last 8 runs)
@@ -172,6 +173,7 @@ Immich (upload it again) rather than into the bucket by hand: Immich also needs 
    ```sh
    rclone copy /Volumes/Backup/immich/library crypt:library --transfers 8 --progress
    rclone copy /Volumes/Backup/immich/upload  crypt:upload  --transfers 8 --progress
+   rclone copy /Volumes/Backup/immich/external crypt:external --transfers 8 --progress   # if the disk has it
    echo ok | rclone rcat crypt:.mounted            # marker Immich and the backup job wait for
    ```
    The `.immich` marker files inside `library/` and `upload/` are on the disk and come back with the folders. The

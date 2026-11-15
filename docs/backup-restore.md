@@ -17,7 +17,7 @@ A third copy on a personal external disk, made by hand every few months, is in [
 
 | App | What | Where it lives | Repository on the Storage Box |
 | --- | ---- | -------------- | ----------------------------- |
-| Immich | Photo originals (`library`, `upload`) | EuroNodes S3, behind the rclone mount `/mnt/rclone` | `restic-immich` |
+| Immich | Photo originals (`library`, `upload`) and the curated archive (`external`) | EuroNodes S3, behind the rclone mount `/mnt/rclone` | `restic-immich` |
 | Immich | Profile pictures (`profile`) and Immich's own nightly database dumps (`backups`) | Immich's local volume, mounted at `/immich` in the job | `restic-immich` |
 | Pocket ID | A fresh `pg_dump` of its database, taken by the job | Postgres (CloudNativePG) | `restic-pocket-id` |
 | Pocket ID | Its data folder `/app/data` (application images, profile pictures) | Local volume `pocket-id-data` | `restic-pocket-id` |
@@ -283,10 +283,10 @@ The passkeys live in the database, so they come back with it. They work as long 
    kubectl apply -f docs/restore/restic-shell-immich.yaml
    kubectl -n immich exec -it restic-shell -- sh
    r restore latest --tag immich --target / --exclude-xattr security.selinux \
-     --include /mnt/rclone/library --include /mnt/rclone/upload
+     --include /mnt/rclone/library --include /mnt/rclone/upload --include /mnt/rclone/external
    ```
    A new bucket also lacks the marker object `.mounted` at the crypt root, which Immich's init container and the
-   nightly job wait for (it is not in the snapshot, which holds only `library` and `upload`). Create it in the same
+   nightly job wait for (it is not in the snapshot, which holds only `library`, `upload` and `external`). Create it in the same
    shell, once the mount is up: `echo ok > /mnt/rclone/.mounted`. Without it Immich waits forever and the backup job fails.
    Restore time is the size of the library over the link, so it can take hours; the shell pod keeps running. The
    `.immich` marker files come back with the folders.
