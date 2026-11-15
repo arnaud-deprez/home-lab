@@ -15,7 +15,7 @@ workflow), [`flux-bootstrap/README.md`](flux-bootstrap/README.md) (one-time clus
 bootstrap) [`docs/euronodes.md`](docs/euronodes.md) (EuroNodes cluster: Talos, S3 storage) and
 [`docs/backup-restore.md`](docs/backup-restore.md) (its restic backups and how to restore),
 [`docs/disk-backup.md`](docs/disk-backup.md) (manual copy to an external disk, `scripts/euronodes-disk-backup.sh`) and
-[`docs/photo-library.md`](docs/photo-library.md) (curated photo archive as Immich external libraries: date fixing, albums, per-cluster storage) and
+[`docs/immich/photo-external-library.md`](docs/immich/photo-external-library.md) (curated photo archive as Immich external libraries: date fixing, albums, per-cluster storage) and
 [`docs/monitoring.md`](docs/monitoring.md) (alerting: what watches what, where alerts go, how to test them). Read those before making non-trivial changes — this file only summarizes
 what's needed to navigate and validate.
 

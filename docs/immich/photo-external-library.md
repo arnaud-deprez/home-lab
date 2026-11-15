@@ -3,7 +3,7 @@
 The family archive (folders per year and event) is indexed by Immich **in place** as read-only
 *external libraries*. Immich never moves, renames or edits these files, so the folder tree stays the
 backup format, unlike uploads, which the storage template (`{{y}}/{{y-MM-dd}}/{{filename}}`) re-files.
-Design: [`superpowers/specs/2026-11-15-immich-external-photo-library-design.md`](superpowers/specs/2026-11-15-immich-external-photo-library-design.md).
+Design: [`superpowers/specs/2026-11-15-immich-external-photo-library-design.md`](../superpowers/specs/2026-11-15-immich-external-photo-library-design.md).
 
 ## Where it lives
 
@@ -12,12 +12,12 @@ Design: [`superpowers/specs/2026-11-15-immich-external-photo-library-design.md`]
 | Path in every cluster | `/data/external/<Library>` in the immich-server pod (`Shared`, `Arnaud`, `Amelie`) |
 | euronodes | `immich/external/` in the rclone-crypt S3 mount; `/data/external` is a symlink to it (init container `wait-mount`) |
 | Other clusters | mount a PVC read-only at `/data/external` in the Immich pod; nothing else differs. Not done yet |
-| Backup (euronodes) | restic job (`/mnt/rclone/external`), and the manual disk copy ([`disk-backup.md`](disk-backup.md)) |
+| Backup (euronodes) | restic job (`/mnt/rclone/external`), and the manual disk copy ([`disk-backup.md`](../disk-backup.md)) |
 | Source of truth | the folders on your Mac and the original hard drive |
 
 ## Scope and albums
 
-Defined in [`scripts/photo-library/config.json`](../scripts/photo-library/config.json).
+Defined in [`scripts/photo-library/config.json`](../../scripts/photo-library/config.json).
 
 - `Shared`, `Arnaud` (not `Arnaud/papa`): every direct sub-folder is an album.
 - `Amelie`: the 13 school periods `2003-2004(3e)` to `2015-2016(Recherche d'emploi - Entrée P&T )`: every *event* folder
@@ -46,6 +46,7 @@ Rule per file, first match wins (the folder year is the `YYYY` at the start of t
 | `keep-exif` | EXIF year within 1 of the folder year | unchanged |
 | `from-mtime` | modification year within 1 of the folder year | the modification date |
 | `mtime-day-folder-year` | modification date is a real date but its year is off | folder year with the modification's month, day, time |
+| `override-seq` | as `jan1-seq`, for an album listed in `date_overrides` of `config.json` (e.g. `"Arnaud/2006 - TU": "2006-10"`) | the 1st of that month (or the given day), 12:00:00 + 1 s per file |
 | `jan1-seq` | no usable modification date, or one shared by 20+ files of the album with a wrong year (placeholder) | 1 January of the folder year, 12:00:00 + 1 s per file in filename order |
 | `skip-no-year` | folder name has no `YYYY ` prefix | not touched, listed in the report |
 

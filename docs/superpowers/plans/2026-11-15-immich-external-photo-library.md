@@ -51,7 +51,7 @@ scripts/photo-library/
 apps/euronodes/immich/helmrelease-patch.yaml   wait-mount init: external symlink
 apps/euronodes/immich/restic-backup.yaml       add /mnt/rclone/external
 scripts/euronodes-disk-backup.sh               PHOTO_DIRS gains external
-docs/photo-library.md                          runbook; docs/euronodes.md, backup-restore.md, disk-backup.md updated
+docs/immich/photo-external-library.md                          runbook; docs/euronodes.md, backup-restore.md, disk-backup.md updated
 ```
 
 ---
@@ -134,17 +134,17 @@ docs/photo-library.md                          runbook; docs/euronodes.md, backu
 ### Task 6: Documentation
 
 **Files:**
-- Create: `docs/photo-library.md`
+- Create: `docs/immich/photo-external-library.md`
 - Modify: `docs/euronodes.md` (storage table and rclone section), `docs/backup-restore.md` (table at line ~20, restore commands at ~286: include `external`), `docs/disk-backup.md` (layout at ~22, steps ~173: `external`), `CLAUDE.md` (one line linking the new doc)
 
-- [ ] **Step 1:** Write `docs/photo-library.md`: purpose, `/data/external/<Library>` convention for other clusters (a PVC mounted at that path, read-only, is all a cluster needs), scope and album rules, date rule and the undo procedure, the phase workflow (Tasks 3-9), how to add Amelie's later periods (edit `config.json`), the NFD/NFC note, restore of one file, how to disable the HTTP/2 experiment later (pointer only).
+- [ ] **Step 1:** Write `docs/immich/photo-external-library.md`: purpose, `/data/external/<Library>` convention for other clusters (a PVC mounted at that path, read-only, is all a cluster needs), scope and album rules, date rule and the undo procedure, the phase workflow (Tasks 3-9), how to add Amelie's later periods (edit `config.json`), the NFD/NFC note, restore of one file, how to disable the HTTP/2 experiment later (pointer only).
 - [ ] **Step 2:** Update the four existing docs consistently with Task 5.
 - [ ] **Step 3:** Verify: `grep -rn "library.*upload" docs/*.md` shows no remaining statement that only `library` and `upload` are backed up.
 - [ ] **Step 4:** Commit `docs: external photo library runbook`.
 
 ### Task 7: Mac rclone remote and phase 1 copy (guided, user runs the commands)
 
-**Files:** none in the repo (add the exact commands to `docs/photo-library.md` as they are proven).
+**Files:** none in the repo (add the exact commands to `docs/immich/photo-external-library.md` as they are proven).
 
 - [ ] **Step 1:** Tell the user which keys to read from the decrypted `apps/euronodes/immich/rclone-secret.sops.yaml` (they run `sops -d` themselves): the S3 endpoint, access key, secret, bucket `home`, prefix `immich/`, the crypt passwords and filename-encryption setting. Never ask for the values to be pasted.
 - [ ] **Step 2:** Guide `rclone config` on the Mac to create two remotes: `euro-s3` (S3 provider, same endpoint and V4/V2 signature setting as the cluster, see the secret's note) and `euro-crypt` (crypt over `euro-s3:home/immich`, same passwords and `filename_encryption`). Verify: `rclone lsd euro-crypt:` lists `library` and `upload`, and `rclone cat euro-crypt:.mounted` succeeds. If it does not, stop and compare with the cluster config.
@@ -182,13 +182,13 @@ docs/photo-library.md                          runbook; docs/euronodes.md, backu
 ### Task 11: Duplicates
 
 - [ ] **Step 1:** Compare the asset count with the "before" figure; run Immich's duplicate detection (Utilities > Review duplicates) after its job finished.
-- [ ] **Step 2:** Present the list to the user. For each group, the external asset is kept and the uploaded one is deleted only after the user confirms. Record decisions in `docs/photo-library.md` if a recurring pattern appears.
+- [ ] **Step 2:** Present the list to the user. For each group, the external asset is kept and the uploaded one is deleted only after the user confirms. Record decisions in `docs/immich/photo-external-library.md` if a recurring pattern appears.
 
 ### Task 12: Phase 2 (`Amelie`)
 
 - [ ] **Step 1:** Re-run `list_albums.py 2` (collisions) and `fix_dates.py plan 2`; the user reviews the report, then `apply`. Re-measure the in-scope size and confirm the S3 and Storage Box headroom.
 - [ ] **Step 2:** Repeat Task 7 steps 4 (copy `Amelie` periods only, backup suspended), Task 9 (library owned by Amelie, scan in one or two batches of periods), Task 10 (`create-albums.sh Amelie` with Amelie's key), Task 11.
-- [ ] **Step 3:** Update `docs/photo-library.md` with measured durations and any tuning; commit.
+- [ ] **Step 3:** Update `docs/immich/photo-external-library.md` with measured durations and any tuning; commit.
 
 ---
 
