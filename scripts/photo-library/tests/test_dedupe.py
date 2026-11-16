@@ -161,6 +161,17 @@ class ReportTest(unittest.TestCase):
         self.assertTrue(lines[0].startswith("group,tier,reason,"))
         self.assertIn("g1,A,ok,e1,", lines[1])
 
+    def test_report_lists_every_photo_of_every_group_even_without_an_external_one(self):
+        v = classify(group(asset("e1", EXT + "a.jpg", w=800, h=600), asset("e2", EXT + "b.jpg"), gid="g9"))
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "report.csv"
+            write_report([v], p)
+            import csv
+            row = next(csv.DictReader(open(p, encoding="utf-8")))
+        self.assertEqual(row["reason"], "multi-external")
+        self.assertEqual(row["photos"], f"{EXT}a.jpg 800x600 | {EXT}b.jpg 1600x1200")
+        self.assertEqual(row["count"], "2")
+
 
 if __name__ == "__main__":
     unittest.main()

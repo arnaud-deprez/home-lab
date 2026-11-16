@@ -102,7 +102,7 @@ def undo_trash(client, log_path: Path) -> int:
 
 
 REPORT_COLUMNS = ["group", "tier", "reason", "external_id", "external_path", "external_wxh",
-                  "trash_ids", "trash_paths", "trash_wxh"]
+                  "trash_ids", "trash_paths", "trash_wxh", "count", "photos"]
 
 
 def summarize(verdicts: list) -> dict:
@@ -126,4 +126,5 @@ def write_report(verdicts: list, path: Path) -> None:
             w.writerow([v.group_id, v.tier, v.reason,
                         e["id"] if e else "", e["originalPath"] if e else "", wxh(e) if e else "",
                         " ".join(a["id"] for a in v.trash), " | ".join(a["originalPath"] for a in v.trash),
-                        " ".join(wxh(a) for a in v.trash)])
+                        " ".join(wxh(a) for a in v.trash),
+                        len(v.assets), " | ".join(f"{a['originalPath']} {wxh(a)}" for a in v.assets)])
