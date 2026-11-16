@@ -219,7 +219,7 @@ the one-time sign-in links last **one hour**: generate each user's link when the
 | Data | Where |
 | ---- | ----- |
 | `library`, `upload` (originals) | EuroNodes S3 bucket `home`, prefix `immich/`, through rclone crypt (client-side encrypted, file names too) |
-| `external` (curated photo archive, never edited by Immich) | Same bucket, prefix and crypt: `immich/external/`, seen as `/data/external` (symlink created by the same init container, with a `.keep` marker because S3 has no empty folders); see [`immich/photo-external-library.md`](immich/photo-external-library.md) |
+| `external` (curated photo archive, never edited by Immich) | Same bucket, prefix and crypt: `immich/external/`, read by Immich at `/mnt/rclone/external/<Library>` (the init container creates the folder with a `.keep` marker because S3 has no empty folders; Immich refuses import paths under `/data`, its media location); see [`immich/photo-external-library.md`](immich/photo-external-library.md) |
 | `profile`, `backups` (Immich's nightly DB dumps), `thumbs`, `encoded-video`, ML cache, Postgres | local `local-path` |
 
 How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):

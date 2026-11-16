@@ -48,13 +48,15 @@ spec:
                 - -c
                 - |
                   until [ -f /mnt/rclone/.mounted ]; do echo waiting for rclone mount; sleep 5; done
-                  # external/ holds the read-only archive (external libraries, docs/immich/photo-external-library.md). S3 has
-                  # no empty directories, so keep a marker file: the symlink target and the restic path must exist.
+                  # external/ holds the read-only archive (external libraries, docs/immich/photo-external-library.md).
+                  # Immich reads it at /mnt/rclone/external/<Library>: it refuses import paths under its media location
+                  # (/data), so no symlink there. S3 has no empty directories: keep a marker file so the folder and the
+                  # restic path exist.
                   mkdir -p /mnt/rclone/external
                   [ -e /mnt/rclone/external/.keep ] || echo keep > /mnt/rclone/external/.keep
-                  # /data is the local volume: library/, upload/ and external/ there are symlinks into the S3 mount.
+                  # /data is the local volume: library/ and upload/ there are symlinks into the S3 mount.
                   # Replace the empty directories left by the former bind mounts, never a non-empty one.
-                  for d in library upload external; do
+                  for d in library upload; do
                     if [ -d /data/$d ] && [ ! -L /data/$d ]; then
                       rmdir /data/$d || { echo "/data/$d is not empty: not replacing it"; exit 1; }
                     fi
@@ -91,6 +93,20 @@ spec:
         main:
           containers:
             main:
+              # Face detection keeps the single allowed core busy: with the chart's default 1s probe timeout the
+              # kubelet SIGTERMed the pod during the first import (exit 143, 2026-11-16). Same tolerance as the server.
+              probes:
+                liveness:
+                  spec:
+                    timeoutSeconds: 15
+                    failureThreshold: 6
+                readiness:
+                  spec:
+                    timeoutSeconds: 15
+                    failureThreshold: 6
+                startup:
+                  spec:
+                    timeoutSeconds: 15
               resources:
                 requests:
                   cpu: 100m
