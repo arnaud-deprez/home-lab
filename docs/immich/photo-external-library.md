@@ -9,9 +9,9 @@ Design: [`superpowers/specs/2026-11-15-immich-external-photo-library-design.md`]
 
 | | |
 | --- | --- |
-| Path in every cluster | `/data/external/<Library>` in the immich-server pod (`Shared`, `Arnaud`, `Amelie`) |
-| euronodes | `immich/external/` in the rclone-crypt S3 mount; `/data/external` is a symlink to it (init container `wait-mount`) |
-| Other clusters | mount a PVC read-only at `/data/external` in the Immich pod; nothing else differs. Not done yet |
+| Import paths | `<root>/<Library>` in the immich-server pod (`Shared`, `Arnaud`, `Amelie`). `<root>` is `/mnt/rclone/external` on euronodes |
+| euronodes | `immich/external/` in the rclone-crypt S3 mount, which the pod already sees at `/mnt/rclone`; created by the `wait-mount` init container |
+| Other clusters | mount a read-only volume anywhere **outside `/data`** (Immich answers `Cannot use media upload folder for external libraries` for paths under its media location) and use that as `<root>`. Not done yet |
 | Backup (euronodes) | restic job (`/mnt/rclone/external`), and the manual disk copy ([`disk-backup.md`](../disk-backup.md)) |
 | Source of truth | the folders on your Mac and the original hard drive |
 
@@ -67,3 +67,27 @@ Rule per file, first match wins (the folder year is the `YYYY` at the start of t
 modification date, which Immich uses; `apply` sets it only when it is wrong (the file's content is untouched, the old
 value goes in the undo log). They are not re-encoded (Immich transcodes them for playback). Values that were
 a zero date (`0000:00:00`) cannot be written back by `undo`; they are reported. The hard drive holds the originals.
+
+## Albums and sharing
+
+[`scripts/photo-library/create-albums.sh`](../../scripts/photo-library/create-albums.sh) creates one album per folder and shares
+the new albums with the other user. It runs the third-party [immich-folder-album-creator](https://github.com/Salvoxia/immich-folder-album-creator)
+(MIT), pinned to release 2.0.3 by commit and checksum, with `uv`; it only talks to your Immich server.
+
+1. In Immich, as the **owner of the library** (Account settings → API keys), create a key with these permissions:
+   `asset.read`, `album.create`, `album.read`, `album.update`, `albumAsset.create`, `albumUser.create`, `user.read`.
+2. In a terminal (the key is read from the environment and passed to the tool through a temporary private file, not on the
+   command line):
+   ```sh
+   cd scripts/photo-library
+   export IMMICH_URL=https://immich.vps.powple.com
+   read -rs IMMICH_API_KEY && export IMMICH_API_KEY      # paste the key, nothing is echoed
+   export SHARE_WITH="<the other user's name or email>"  # viewer by default (SHARE_ROLE=editor to change)
+   ./create-albums.sh Shared                              # lists the albums, asks before creating; then Arnaud
+   ```
+3. Check the albums in Immich, and that the other user sees them. Re-running is safe: existing albums only get new photos, and
+   only newly created albums are shared.
+
+Version note: the tool's client library targets Immich server **3.3 or newer**; this cluster ran 3.2.0 when the albums were
+created. If the tool fails on the first API calls (before it lists the albums), upgrade Immich first (the check is read-only
+until you confirm). `Amelie` is not supported by the script yet: its events are two levels down (phase 2).

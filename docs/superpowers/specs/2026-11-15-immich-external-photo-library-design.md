@@ -76,9 +76,11 @@ Root: `/Users/arnaud/Pictures/Photos` on the user's Mac. The hard drive holds un
 - Applies to the scoped folders only.
 
 ### Hosting, common to all clusters
-- The base Immich manifests (`apps/base/immich`) declare a read-only volume mounted at `/external`
-  in the immich-server pod. Immich import paths are `/external/Shared`, `/external/Arnaud`,
-  `/external/Amelie` on every cluster, so the album script and its config are identical everywhere.
+- Immich import paths are `<root>/Shared`, `<root>/Arnaud`, `<root>/Amelie`, where `<root>` is a per-cluster folder in the
+  immich-server pod **outside `/data`**: Immich refuses import paths under its media location (`Cannot use media upload
+  folder for external libraries`, found on 2026-11-15; the first design `/data/external` was wrong). On euronodes `<root>` is
+  `/mnt/rclone/external`. The album script and its config take `<root>` per cluster. The base manifests are not modified
+  (laptop and tierhive are untouched until they opt in by mounting a read-only volume at their own `<root>`).
 - Each cluster overlay chooses the backing storage:
   - **euronodes**: an `external/` prefix in the existing rclone-crypt S3 mount, next to `library/` and
     `upload/`, reached through the same single `/mnt/rclone` mount (do not add a second mount point;
@@ -104,7 +106,7 @@ Root: `/Users/arnaud/Pictures/Photos` on the user's Mac. The hard drive holds un
 1. Dry-run date report on phase 1; user reviews; write dates; keep undo CSV.
 2. Copy phase 1 to the cluster's `external` storage (e.g. `rclone copy` from the Mac to the crypt remote,
    run by the user).
-3. GitOps change: base `/external` volume, euronodes overlay, restic path, docs. Flux reconcile.
+3. GitOps change: euronodes overlay (the `external/` folder and marker), restic path, docs. Flux reconcile.
 4. Create the two/three external libraries in Immich, run the scan, check the Folders view and dates.
 5. Create and share albums with the script.
 6. Verify the next restic run includes `external/`; test a restore of a few files.
@@ -112,10 +114,7 @@ Root: `/Users/arnaud/Pictures/Photos` on the user's Mac. The hard drive holds un
 
 ## Calls made after the builder check (author's calls, to be confirmed on review)
 
-- **Read-only on euronodes**: `/external` is a symlink to `/mnt/rclone/external`, created by the
-  existing `wait-mount` init container, like `library/` and `upload/`. The volume stays writable;
-  read-only is by convention (Immich never writes to external libraries). Other clusters mount their
-  PVC `readOnly: true`.
+- **Read-only on euronodes**: not enforced by the volume (the rclone mount is writable); Immich never writes to external libraries. Other clusters mount their volume `readOnly: true`.
 - **Year source for dates**: the year comes from the album folder name (`YYYY - …`). All in-scope
   `Shared` and `Arnaud` folders and Amelie event folders have one (`papa` is out of scope). A file
   whose folder has no parsable year is skipped and reported, never given a guessed date.
