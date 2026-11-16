@@ -21,7 +21,7 @@ Root: `/Users/arnaud/Pictures/Photos` on the user's Mac. The hard drive holds un
 | Folder | In scope | Album rule |
 |---|---|---|
 | `Shared` | all (about 17 albums, `Crête 2011` was just moved here, yearless folders removed) | each direct subfolder is an album |
-| `Arnaud` | all except `papa` | each direct subfolder is an album |
+| `Arnaud` | all (`Papa`, 2 photos without a year, was added to the scope later: no date fix) | each direct subfolder is an album |
 | `Amelie` | periods `2003-2004(3e)` through `2015-2016(Recherche d'emploi - Entrée P&T )` only (13 periods) | each **event folder** under a period is an album; the period is not in the album name |
 | `Fla`, `manou`, later `Amelie` periods | out of scope for now | — |
 

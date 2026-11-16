@@ -14,6 +14,11 @@ def nfc(s: str) -> str:
     return unicodedata.normalize("NFC", s)
 
 
+def _key(s: str) -> str:
+    """Comparison key for folder names: macOS is case-insensitive and may store names decomposed."""
+    return nfc(s).casefold()
+
+
 @dataclass
 class Album:
     library: str
@@ -33,15 +38,15 @@ def _subdirs(path: Path):
 
 def _album_dirs(root: Path, lib: Library):
     base = root / lib.name
-    excluded = {nfc(x) for x in lib.exclude}
+    excluded = {_key(x) for x in lib.exclude}
     if lib.album_depth == "child":
-        return [d for d in _subdirs(base) if nfc(d.name) not in excluded]
-    included = None if lib.include is None else {nfc(x) for x in lib.include}
+        return [d for d in _subdirs(base) if _key(d.name) not in excluded]
+    included = None if lib.include is None else {_key(x) for x in lib.include}
     out = []
     for period in _subdirs(base):
-        if included is not None and nfc(period.name) not in included:
+        if included is not None and _key(period.name) not in included:
             continue
-        out.extend(d for d in _subdirs(period) if nfc(d.name) not in excluded)
+        out.extend(d for d in _subdirs(period) if _key(d.name) not in excluded)
     return out
 
 

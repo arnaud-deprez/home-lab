@@ -47,6 +47,12 @@ class ScopeTest(unittest.TestCase):
         names = [a.name for a in iter_albums(cfg(self.root), 2)]
         self.assertEqual(names, ["2005 - 1) x", "2005 - 2) y", "2006 - 1) x"])
 
+    def test_exclude_and_include_ignore_letter_case_like_macos(self):
+        c = cfg(self.root, amelie_include=("p1",))   # folders are P1 and papa on disk
+        c.libraries[0].exclude = ["PAPA"]
+        self.assertEqual([a.name for a in iter_albums(c, 1)], ["2009 - b", "2007 - a"])
+        self.assertEqual([a.name for a in iter_albums(c, 2)], ["2005 - 1) x", "2005 - 2) y"])
+
     def test_folder_year(self):
         self.assertEqual(folder_year("2005 - 1) londres"), 2005)
         self.assertIsNone(folder_year("papa"))

@@ -19,7 +19,8 @@ Design: [`superpowers/specs/2026-11-15-immich-external-photo-library-design.md`]
 
 Defined in [`scripts/photo-library/config.json`](../../scripts/photo-library/config.json).
 
-- `Shared`, `Arnaud` (not `Arnaud/papa`): every direct sub-folder is an album.
+- `Shared`, `Arnaud`: every direct sub-folder is an album (`Arnaud/Papa` has no year: its 2 photos keep their dates and are
+  listed as `skip-no-year`).
 - `Amelie`: the 13 school periods `2003-2004(3e)` to `2015-2016(Recherche d'emploi - Entrée P&T )`: every *event* folder
   under a period is an album (the period is not in the name). Add later periods to `include`.
 - Album name = the folder name. `python3 scripts/photo-library/list_albums.py <phase>` lists them and any name that

@@ -19,9 +19,7 @@
     {
       "name": "Arnaud",
       "album_depth": "child",
-      "exclude": [
-        "papa"
-      ]
+      "exclude": []
     },
     {
       "name": "Amelie",
