@@ -91,3 +91,30 @@ the new albums with the other user. It runs the third-party [immich-folder-album
 Version note: the tool's client library targets Immich server **3.3 or newer**; this cluster ran 3.2.0 when the albums were
 created. If the tool fails on the first API calls (before it lists the albums), upgrade Immich first (the check is read-only
 until you confirm). `Amelie` is not supported by the script yet: its events are two levels down (phase 2).
+
+## Duplicates with older uploads
+
+If photos of the archive were already uploaded to Immich, Immich's duplicate finder (Utilities → Review duplicates) groups them.
+The archive wins: the uploaded copy goes to the trash, never the external one (trashing an external photo would only remove it
+from Immich and from the albums created above). [`scripts/photo-library/dedupe.py`](../../scripts/photo-library/dedupe.py) does it safely:
+
+- It only touches groups with **exactly one external photo** and uploaded copies that are **not larger** than it and have the
+  **same aspect ratio** (rotation ignored). File names are not compared (uploads rename files). Everything else (two external
+  photos, only uploads, a larger upload, another owner, unknown dimensions) is only listed, for you to review in Immich.
+- Before trashing an uploaded copy it adds the external photo to the same albums and copies the favorite mark.
+- Uploaded copies go to Immich's trash (30 days). The log (`log.jsonl`) lists every trashed photo; `undo` restores them.
+
+Create a **separate API key** (Account settings → API keys) with `duplicate.read`, `album.read`, `albumAsset.create`,
+`asset.update`, `asset.delete`, and delete it when done.
+
+```sh
+cd scripts/photo-library
+export IMMICH_URL=https://immich.vps.powple.com
+read -rs IMMICH_API_KEY && export IMMICH_API_KEY
+uv run dedupe.py report --out ~/dedupe-1          # read-only: counts per reason, examples, report.csv
+uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   # pilot: N is printed if you omit it
+# check the 10 groups in Immich (albums, favorites, the external photos are still there), then without --limit
+uv run dedupe.py undo --log ~/dedupe-1/log.jsonl  # if something is wrong
+```
+
+Do not empty Immich's trash until you are sure, and not before the first backup of `external/` has run.
