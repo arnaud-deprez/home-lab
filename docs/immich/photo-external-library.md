@@ -118,3 +118,33 @@ uv run dedupe.py undo --log ~/dedupe-1/log.jsonl  # if something is wrong
 ```
 
 Do not empty Immich's trash until you are sure, and not before the first backup of `external/` has run.
+
+### Duplicates inside the archive
+
+Immich cannot remove files of an external library (trashing one only hides it until the next scan), so redundant copies are
+removed from the Mac folders and the bucket, in a reversible way, by
+[`scripts/photo-library/archive_dupes.py`](../../scripts/photo-library/archive_dupes.py). It reads the `report.csv` of
+`dedupe.py` (groups with several external photos) and only acts on:
+
+- **identical pixels** (compared on the image data, so different EXIF or file names do not matter): the best named copy is
+  kept (camera names over Facebook-style names, dated folders over `vrac`),
+- a **much smaller copy** (at most half the size, same aspect ratio) of the same picture: a thumbnail.
+
+It never touches resized copies (80% versions), burst shots (same size, different pixels) or files it cannot hash.
+
+```sh
+cd scripts/photo-library
+uv run archive_dupes.py plan --report ~/dedupe-2/report.csv --out ~/archive-dupes-1   # read-only; review plan.csv
+uv run archive_dupes.py apply ~/archive-dupes-1/plan.csv --quarantine ~/Pictures/Photos-removed --yes-move <N>
+```
+
+`apply` re-checks that the kept file still has the same pixels, then **moves** the other file to the quarantine folder (same
+sub-folders; keep it outside the photo root) and writes `moves.csv` (for `undo`) and `bucket-removals.txt`. Then remove the
+same files from the bucket (rclone variables loaded as for the copy; try `--dry-run` first), and rescan the libraries in Immich:
+
+```sh
+rclone delete crypt:external --files-from-raw ~/archive-dupes-1/bucket-removals.txt --dry-run
+rclone delete crypt:external --files-from-raw ~/archive-dupes-1/bucket-removals.txt
+```
+
+To go back: `uv run archive_dupes.py undo ~/archive-dupes-1/moves.csv`, then copy the files to the bucket again.

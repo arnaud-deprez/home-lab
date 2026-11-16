@@ -119,3 +119,20 @@ def write_dates(changes: dict) -> list:
         rebuild_exif(failed)
         failed = attempt({p: changes[p] for p in failed})
     return failed
+
+
+def image_hashes(paths: list) -> dict:
+    """MD5 of the image data only (metadata excluded): two files with the same picture but different EXIF match."""
+    result = {}
+    for i in range(0, len(paths), _BATCH):
+        batch = paths[i:i + _BATCH]
+        cmd = ["exiftool", "-json", "-q", "-m", "-charset", "filename=UTF8", "-api", "ImageHashType=MD5",
+               "-ImageDataHash"] + [str(p) for p in batch]
+        out = subprocess.run(cmd, capture_output=True, text=True).stdout
+        try:
+            rows = {r["SourceFile"]: r for r in (json.loads(out) if out.strip() else [])}
+        except json.JSONDecodeError:
+            rows = {}
+        for p in batch:
+            result[p] = rows.get(str(p), {}).get("ImageDataHash")
+    return result
