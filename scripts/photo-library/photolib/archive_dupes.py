@@ -5,6 +5,7 @@ Input is the report of dedupe.py (groups of several external photos). A group is
   - it is a pair, same aspect ratio, the smaller one at most half the size of the other (a thumbnail).
 Resized copies (80%) and different pictures (burst shots) are left alone."""
 import csv
+import hashlib
 import os
 import re
 import shutil
@@ -28,9 +29,11 @@ def _nfc(s: str) -> str:
 @dataclass
 class Info:
     path: str            # relative to the photo root, NFC
-    hash: object         # str or None
+    hash: object         # str or None (hash of the image data)
     width: int
     height: int
+    size: int = 0        # file size in bytes
+    sha1: object = None  # hash of the whole file, only computed for files without an image hash
 
 
 @dataclass
@@ -57,9 +60,10 @@ def keep_score(path: str) -> int:
     return score
 
 
-def decide(infos: list, include_resized: bool = False) -> Decision:
+def decide(infos: list, include_resized: bool = False, include_leftovers: bool = False) -> Decision:
     """include_resized: also remove the smaller of two copies of the same picture at another size (same aspect ratio),
     even without hashes (videos). The larger one is the better quality and is kept."""
+    include_resized = include_resized or include_leftovers   # leftovers: for pairs the user has checked by hand
     hashed = all(i.hash is not None for i in infos)
     if not hashed and not include_resized:
         return Decision("no-hash")
@@ -76,6 +80,13 @@ def decide(infos: list, include_resized: bool = False) -> Decision:
             if include_resized:
                 return Decision("resized-copy", big.path, [small.path])
             return Decision("resized-copy")
+        if include_leftovers and aspect <= ASPECT_TOLERANCE:
+            a, b = infos
+            if a.sha1 and a.sha1 == b.sha1:
+                ordered = sorted(infos, key=lambda i: (-keep_score(i.path), i.path))
+                return Decision("identical-bytes", ordered[0].path, [ordered[1].path])
+            ordered = sorted(infos, key=lambda i: (-(i.width * i.height), -i.size, -keep_score(i.path), i.path))
+            return Decision("larger-file", ordered[0].path, [ordered[1].path])
     return Decision("different-pictures" if hashed else "no-hash")
 
 
@@ -110,10 +121,18 @@ def _parse_report(report_csv: Path) -> list:
     return groups
 
 
-PLAN_COLUMNS = ["group", "reason", "keep", "remove"]
+PLAN_COLUMNS = ["group", "reason", "keep", "remove", "keep_bytes", "remove_bytes"]
 
 
-def plan_rows(root: Path, report_csv: Path, include_resized: bool = False) -> list:
+def _sha1(path: Path) -> str:
+    h = hashlib.sha1()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def plan_rows(root: Path, report_csv: Path, include_resized: bool = False, include_leftovers: bool = False) -> list:
     _index_cache.pop(str(root), None)
     groups = _parse_report(report_csv)
     paths, rows = {}, []
@@ -121,15 +140,21 @@ def plan_rows(root: Path, report_csv: Path, include_resized: bool = False) -> li
         try:
             paths.update({rel: local_path(root, rel) for rel, _, _ in photos})
         except KeyError:  # a file of the group is not in the photo root any more (moved by an earlier run)
-            rows.append({"group": gid, "reason": "missing-file", "keep": "", "remove": ""})
+            rows.append({"group": gid, "reason": "missing-file", "keep": "", "remove": "", "keep_bytes": "", "remove_bytes": ""})
             groups.remove((gid, photos))
     hashes = image_hashes(list(paths.values()))
+    size = lambda rel: paths[rel].stat().st_size  # noqa: E731
     for gid, photos in groups:
-        d = decide([Info(rel, hashes.get(paths[rel]), w, h) for rel, w, h in photos], include_resized)
+        infos = []
+        for rel, w, h in photos:
+            sha = _sha1(paths[rel]) if include_leftovers and hashes.get(paths[rel]) is None else None
+            infos.append(Info(rel, hashes.get(paths[rel]), w, h, size(rel), sha))
+        d = decide(infos, include_resized, include_leftovers)
         if d.remove:
-            rows.extend({"group": gid, "reason": d.reason, "keep": d.keep, "remove": r} for r in d.remove)
+            rows.extend({"group": gid, "reason": d.reason, "keep": d.keep, "remove": r,
+                         "keep_bytes": size(d.keep), "remove_bytes": size(r)} for r in d.remove)
         else:
-            rows.append({"group": gid, "reason": d.reason, "keep": "", "remove": ""})
+            rows.append({"group": gid, "reason": d.reason, "keep": "", "remove": "", "keep_bytes": "", "remove_bytes": ""})
     return rows
 
 
@@ -147,6 +172,11 @@ def apply_plan(root: Path, rows: list, quarantine: Path, out: Path) -> int:
             h = image_hashes([keep, gone])
             if h[keep] is None or h[keep] != h[gone]:
                 continue
+        elif r["reason"] == "identical-bytes":
+            if _sha1(keep) != _sha1(gone):
+                continue
+        elif r["reason"] == "larger-file" and keep.stat().st_size < gone.stat().st_size:
+            continue
         rel = gone.relative_to(root)
         dest = quarantine / rel
         dest.parent.mkdir(parents=True, exist_ok=True)

@@ -25,7 +25,7 @@ def _root() -> Path:
 
 
 def cmd_plan(args) -> int:
-    rows = plan_rows(_root(), args.report, args.resized)
+    rows = plan_rows(_root(), args.report, args.resized, args.leftovers)
     args.out.mkdir(parents=True, exist_ok=True)
     with open(args.out / "plan.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, PLAN_COLUMNS)
@@ -68,6 +68,9 @@ def main(argv) -> int:
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--resized", action="store_true",
                    help="also remove the smaller of two copies of the same picture at different sizes")
+    p.add_argument("--leftovers", action="store_true",
+                   help="also pairs left over, that you have checked by hand: identical files (any name) and, "
+                        "for the rest, the smaller file; delete the rows you do not want from plan.csv")
     a = sub.add_parser("apply")
     a.add_argument("plan", type=Path)
     a.add_argument("--quarantine", type=Path, required=True)
