@@ -91,3 +91,62 @@ the new albums with the other user. It runs the third-party [immich-folder-album
 Version note: the tool's client library targets Immich server **3.3 or newer**; this cluster ran 3.2.0 when the albums were
 created. If the tool fails on the first API calls (before it lists the albums), upgrade Immich first (the check is read-only
 until you confirm). `Amelie` is not supported by the script yet: its events are two levels down (phase 2).
+
+## Duplicates with older uploads
+
+If photos of the archive were already uploaded to Immich, Immich's duplicate finder (Utilities → Review duplicates) groups them.
+The archive wins: the uploaded copy goes to the trash, never the external one (trashing an external photo would only remove it
+from Immich and from the albums created above). [`scripts/photo-library/dedupe.py`](../../scripts/photo-library/dedupe.py) does it safely:
+
+- It only touches groups with **exactly one external photo** and uploaded copies that are **not larger** than it and have the
+  **same aspect ratio** (rotation ignored). File names are not compared (uploads rename files). Everything else (two external
+  photos, only uploads, a larger upload, another owner, unknown dimensions) is only listed, for you to review in Immich.
+- Before trashing an uploaded copy it adds the external photo to the same albums and copies the favorite mark.
+- Uploaded copies go to Immich's trash (30 days). The log (`log.jsonl`) lists every trashed photo; `undo` restores them.
+
+Create a **separate API key** (Account settings → API keys) with `duplicate.read`, `album.read`, `albumAsset.create`,
+`asset.update`, `asset.delete`, and delete it when done.
+
+```sh
+cd scripts/photo-library
+export IMMICH_URL=https://immich.vps.powple.com
+read -rs IMMICH_API_KEY && export IMMICH_API_KEY
+uv run dedupe.py report --out ~/dedupe-1          # read-only: counts per reason, examples, report.csv
+uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   # pilot: N is printed if you omit it
+# check the 10 groups in Immich (albums, favorites, the external photos are still there), then without --limit
+uv run dedupe.py undo --log ~/dedupe-1/log.jsonl  # if something is wrong
+```
+
+Do not empty Immich's trash until you are sure, and not before the first backup of `external/` has run.
+
+### Duplicates inside the archive
+
+Immich cannot remove files of an external library (trashing one only hides it until the next scan), so redundant copies are
+removed from the Mac folders and the bucket, in a reversible way, by
+[`scripts/photo-library/archive_dupes.py`](../../scripts/photo-library/archive_dupes.py). It reads the `report.csv` of
+`dedupe.py` (groups with several external photos) and only acts on:
+
+- **identical pixels** (compared on the image data, so different EXIF or file names do not matter): the best named copy is
+  kept (camera names over Facebook-style names, dated folders over `vrac`),
+- a **much smaller copy** (at most half the size, same aspect ratio) of the same picture: a thumbnail.
+
+It never touches burst shots (same size, different pixels), other aspect ratios or files it cannot hash. With `plan --resized` it
+also removes the smaller of two copies of the same picture at another size (for example the 80% versions): the larger one is
+the better quality and is kept. Always use a fresh `dedupe.py report` (groups with files already moved are skipped).
+
+```sh
+cd scripts/photo-library
+uv run archive_dupes.py plan --report ~/dedupe-2/report.csv --out ~/archive-dupes-1   # read-only; review plan.csv
+uv run archive_dupes.py apply ~/archive-dupes-1/plan.csv --quarantine ~/Pictures/Photos-removed --yes-move <N>
+```
+
+`apply` re-checks that the kept file still has the same pixels, then **moves** the other file to the quarantine folder (same
+sub-folders; keep it outside the photo root) and writes `moves.csv` (for `undo`) and `bucket-removals.txt`. Then remove the
+same files from the bucket (rclone variables loaded as for the copy; try `--dry-run` first), and rescan the libraries in Immich:
+
+```sh
+rclone delete crypt:external --files-from-raw ~/archive-dupes-1/bucket-removals.txt --dry-run
+rclone delete crypt:external --files-from-raw ~/archive-dupes-1/bucket-removals.txt
+```
+
+To go back: `uv run archive_dupes.py undo ~/archive-dupes-1/moves.csv`, then copy the files to the bucket again.

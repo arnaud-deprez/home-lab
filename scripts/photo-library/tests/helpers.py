@@ -54,3 +54,26 @@ def make_corrupt_exif_jpeg(path: Path, date: str = "2009:08:01 10:00:00") -> Pat
     data[i:i + 2] = b"\x00\xff"
     path.write_bytes(bytes(data))
     return path
+
+
+def make_valid_jpeg(path: Path, shade: int = 128, date: str = None) -> Path:
+    """A real 16x16 JPEG (image data included) built with a stdlib PNG and macOS sips; `shade` sets the pixels."""
+    import struct
+    import tempfile
+    import zlib
+
+    def chunk(t, b):
+        c = struct.pack(">I", len(b)) + t + b
+        return c + struct.pack(">I", zlib.crc32(t + b) & 0xFFFFFFFF)
+
+    raw = b"".join(b"\x00" + bytes([shade, (shade * 3) % 256, 255 - shade]) * 16 for _ in range(16))
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 16, 16, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "in.png"
+        src.write_bytes(png)
+        subprocess.run(["sips", "-s", "format", "jpeg", str(src), "--out", str(path)], check=True, capture_output=True)
+    if date:
+        subprocess.run(["exiftool", "-q", "-overwrite_original", f"-DateTimeOriginal={date}", str(path)], check=True)
+    return path
