@@ -44,6 +44,22 @@ class DecideTest(unittest.TestCase):
         d = decide([info("S/a/P7240072.JPG", "h1", 3072, 1713), info("S/a/holzheim 295.jpg", "h2", 2457, 1370)])
         self.assertEqual((d.reason, d.remove), ("resized-copy", []))
 
+    def test_resized_copy_is_removed_only_when_asked(self):
+        pair = [info("S/a/P7240072.JPG", "h1", 3072, 1713), info("S/a/holzheim 295.jpg", "h2", 2457, 1370)]
+        d = decide(pair, include_resized=True)
+        self.assertEqual((d.reason, d.keep, d.remove), ("resized-copy", "S/a/P7240072.JPG", ["S/a/holzheim 295.jpg"]))
+
+    def test_resized_rule_works_without_hashes_for_videos(self):
+        pair = [info("S/a/big.mpg", None, 720, 576), info("S/a/small.mpg", None, 576, 461)]
+        d = decide(pair, include_resized=True)
+        self.assertEqual((d.reason, d.keep, d.remove), ("resized-copy", "S/a/big.mpg", ["S/a/small.mpg"]))
+
+    def test_resized_rule_never_removes_burst_shots_or_other_aspect_ratios(self):
+        burst = [info("S/a/DSC_0850.JPG", "h1", 6000, 4000), info("S/a/DSC_0851.JPG", "h2", 6000, 4000)]
+        cropped = [info("S/a/a.jpg", "h1", 3000, 2000), info("S/a/b.jpg", "h2", 2000, 2000)]
+        self.assertEqual(decide(burst, include_resized=True).remove, [])
+        self.assertEqual(decide(cropped, include_resized=True).remove, [])
+
     def test_burst_shots_are_different_pictures(self):
         d = decide([info("S/a/DSC_0850.JPG", "h1", 6000, 4000), info("S/a/DSC_0851.JPG", "h2", 6000, 4000)])
         self.assertEqual((d.reason, d.remove), ("different-pictures", []))
@@ -51,6 +67,8 @@ class DecideTest(unittest.TestCase):
     def test_unhashable_files_are_skipped(self):
         d = decide([info("S/a/v1.mpg", None), info("S/a/v2.mpg", None)])
         self.assertEqual((d.reason, d.remove), ("no-hash", []))
+        d = decide([info("S/a/v1.mpg", None), info("S/a/v2.mpg", None)], include_resized=True)
+        self.assertEqual((d.reason, d.remove), ("no-hash", []))   # same size: cannot tell which is better
 
 
 class PlanApplyTest(unittest.TestCase):
@@ -82,6 +100,10 @@ class PlanApplyTest(unittest.TestCase):
         rows = plan_rows(self.root, self.report("Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg"))
         self.assertEqual([(r["reason"], r["keep"], r["remove"]) for r in rows],
                          [("identical", "Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg")])
+
+    def test_a_group_with_a_file_that_is_gone_is_skipped_not_fatal(self):
+        rows = plan_rows(self.root, self.report("Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/already-moved.jpg"))
+        self.assertEqual([(r["reason"], r["remove"]) for r in rows], [("missing-file", "")])
 
     def test_apply_moves_the_duplicate_to_the_quarantine_and_lists_the_bucket_removals_then_undo(self):
         rows = plan_rows(self.root, self.report("Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg"))

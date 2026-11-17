@@ -57,10 +57,13 @@ def keep_score(path: str) -> int:
     return score
 
 
-def decide(infos: list) -> Decision:
-    if any(i.hash is None for i in infos):
+def decide(infos: list, include_resized: bool = False) -> Decision:
+    """include_resized: also remove the smaller of two copies of the same picture at another size (same aspect ratio),
+    even without hashes (videos). The larger one is the better quality and is kept."""
+    hashed = all(i.hash is not None for i in infos)
+    if not hashed and not include_resized:
         return Decision("no-hash")
-    if len({i.hash for i in infos}) == 1:
+    if hashed and len({i.hash for i in infos}) == 1:
         ordered = sorted(infos, key=lambda i: (-keep_score(i.path), i.path))
         return Decision("identical", ordered[0].path, [i.path for i in ordered[1:]])
     if len(infos) == 2:
@@ -70,8 +73,10 @@ def decide(infos: list) -> Decision:
         if aspect <= ASPECT_TOLERANCE and linear <= THUMBNAIL_MAX_LINEAR:
             return Decision("much-smaller", big.path, [small.path])
         if aspect <= ASPECT_TOLERANCE and linear < 0.95:
+            if include_resized:
+                return Decision("resized-copy", big.path, [small.path])
             return Decision("resized-copy")
-    return Decision("different-pictures")
+    return Decision("different-pictures" if hashed else "no-hash")
 
 
 _index_cache: dict = {}
@@ -108,14 +113,19 @@ def _parse_report(report_csv: Path) -> list:
 PLAN_COLUMNS = ["group", "reason", "keep", "remove"]
 
 
-def plan_rows(root: Path, report_csv: Path) -> list:
+def plan_rows(root: Path, report_csv: Path, include_resized: bool = False) -> list:
     _index_cache.pop(str(root), None)
     groups = _parse_report(report_csv)
-    paths = {rel: local_path(root, rel) for _, photos in groups for rel, _, _ in photos}
+    paths, rows = {}, []
+    for gid, photos in list(groups):
+        try:
+            paths.update({rel: local_path(root, rel) for rel, _, _ in photos})
+        except KeyError:  # a file of the group is not in the photo root any more (moved by an earlier run)
+            rows.append({"group": gid, "reason": "missing-file", "keep": "", "remove": ""})
+            groups.remove((gid, photos))
     hashes = image_hashes(list(paths.values()))
-    rows = []
     for gid, photos in groups:
-        d = decide([Info(rel, hashes.get(paths[rel]), w, h) for rel, w, h in photos])
+        d = decide([Info(rel, hashes.get(paths[rel]), w, h) for rel, w, h in photos], include_resized)
         if d.remove:
             rows.extend({"group": gid, "reason": d.reason, "keep": d.keep, "remove": r} for r in d.remove)
         else:

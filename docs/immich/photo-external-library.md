@@ -130,7 +130,9 @@ removed from the Mac folders and the bucket, in a reversible way, by
   kept (camera names over Facebook-style names, dated folders over `vrac`),
 - a **much smaller copy** (at most half the size, same aspect ratio) of the same picture: a thumbnail.
 
-It never touches resized copies (80% versions), burst shots (same size, different pixels) or files it cannot hash.
+It never touches burst shots (same size, different pixels), other aspect ratios or files it cannot hash. With `plan --resized` it
+also removes the smaller of two copies of the same picture at another size (for example the 80% versions): the larger one is
+the better quality and is kept. Always use a fresh `dedupe.py report` (groups with files already moved are skipped).
 
 ```sh
 cd scripts/photo-library

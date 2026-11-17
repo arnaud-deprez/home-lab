@@ -6,7 +6,8 @@
   uv run archive_dupes.py undo  ~/archive-dupes-1/moves.csv
 
 Actionable groups only: identical pixels (one copy kept, the best named) or a much smaller copy of the same picture
-(thumbnail). Resized copies and different pictures are never touched. `apply` also writes bucket-removals.txt: the
+(thumbnail). With --resized, the smaller of two copies of the same picture at any other size is removed too (the larger
+is kept). Different pictures (burst shots, other aspect ratio) are never touched. `apply` also writes bucket-removals.txt: the
 paths to remove from the bucket with rclone (see docs/immich/photo-external-library.md).
 """
 import argparse
@@ -24,7 +25,7 @@ def _root() -> Path:
 
 
 def cmd_plan(args) -> int:
-    rows = plan_rows(_root(), args.report)
+    rows = plan_rows(_root(), args.report, args.resized)
     args.out.mkdir(parents=True, exist_ok=True)
     with open(args.out / "plan.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, PLAN_COLUMNS)
@@ -65,6 +66,8 @@ def main(argv) -> int:
     p = sub.add_parser("plan")
     p.add_argument("--report", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--resized", action="store_true",
+                   help="also remove the smaller of two copies of the same picture at different sizes")
     a = sub.add_parser("apply")
     a.add_argument("plan", type=Path)
     a.add_argument("--quarantine", type=Path, required=True)
