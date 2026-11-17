@@ -1,6 +1,6 @@
 # Telegram provider. Each cluster overlay patches `spec.channel` (its chat id) and provides the
 # `telegram-token` Secret (key `token`, the bot token) in flux-system, encrypted with its own age key.
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Provider
 metadata:
   name: telegram
