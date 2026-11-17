@@ -1,7 +1,7 @@
 # Errors only. An Alert watches one namespace per source (no all-namespaces wildcard), so this covers
 # Flux itself and the infrastructure HelmReleases; a cluster overlay appends the namespaces of its apps and
 # sets `eventMetadata.cluster` so the message says which cluster it comes from.
-apiVersion: notification.toolkit.fluxcd.io/v1beta3
+apiVersion: notification.toolkit.fluxcd.io/v1
 kind: Alert
 metadata:
   name: flux-errors
