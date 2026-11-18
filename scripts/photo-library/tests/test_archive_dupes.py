@@ -23,6 +23,15 @@ class ScoreTest(unittest.TestCase):
         self.assertGreater(keep_score("Arnaud/2006 - TU/DSCN2857.JPG"), keep_score("Arnaud/2006 - vrac/DSCN2857.JPG"))
 
 
+    def test_curated_folders_beat_exports_copies_and_junk_folders(self):
+        base = "Amelie/p/2017 - Wedding/"
+        good = keep_score(base + "Photos Triées/Civil/a.jpg")
+        for bad in ("Amelie Arnaid/PRINT/a.jpg", "Amelie Arnaid/PRINT - Copie/a.jpg", "Wedding Phone/copie/a.jpg"):
+            self.assertGreater(good, keep_score(base + bad), bad)
+        self.assertGreater(keep_score("Amelie/p/2009 - Roman photo/a.jpg"), keep_score("Amelie/p/2008-2009 - ZzZ/a.jpg"))
+        self.assertGreater(keep_score("Amelie/p/5)Eté/a.jpg"), keep_score("Amelie/p/CEWE 2022/a.jpg"))
+
+
 class DecideTest(unittest.TestCase):
     def test_identical_pixels_keep_the_best_named_one(self):
         d = decide([info("Shared/a/n658828888_746169_1605.jpg"), info("Shared/a/depart skip.jpg")])

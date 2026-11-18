@@ -55,8 +55,13 @@ def keep_score(path: str) -> int:
         score -= 10
     if _CAMERA.match(name):
         score += 3
-    if any("vrac" in f.lower() for f in folders):
+    low = [f.lower() for f in folders]
+    if any("vrac" in f or "zzz" in f or "cewe" in f or "copie" in f or "copy" in f for f in low):
         score -= 5
+    if any(f == "print" or f.startswith("print ") for f in low):
+        score -= 2   # exports for printing
+    if any("triée" in f or "triee" in f for f in low):
+        score += 4   # hand-curated sub-folder
     return score
 
 

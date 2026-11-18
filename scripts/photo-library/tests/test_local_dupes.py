@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from photolib.local_dupes import scan_local
+from photolib.local_dupes import scan_local, split_by_album
 from tests.helpers import make_valid_jpeg
 
 
@@ -48,6 +48,19 @@ class ScanLocalTest(unittest.TestCase):
         self.jpg("Shared/2010 - x/a.jpg")
         self.assertEqual(scan_local(self.root, ["Amelie"], ignore_globs=[]), [])
         self.assertEqual(len(scan_local(self.root, ["Amelie", "Shared"], ignore_globs=[])), 1)
+
+
+class SplitTest(unittest.TestCase):
+    def test_rows_split_by_album_folder_per_library_depth(self):
+        rows = [
+            {"keep": "Amelie/p/e1/a/x.jpg", "remove": "Amelie/p/e1/b/x.jpg"},      # same event, other subfolder
+            {"keep": "Amelie/p/e1/x.jpg", "remove": "Amelie/p/e2/x.jpg"},          # two events
+            {"keep": "Shared/2010 - a/x.jpg", "remove": "Shared/2010 - a/s/x.jpg"},  # child depth: same album
+            {"keep": "Shared/2010 - a/x.jpg", "remove": "Arnaud/2010 - a/x.jpg"},  # two libraries
+        ]
+        same, cross = split_by_album(rows, {"Amelie": 3, "Shared": 2, "Arnaud": 2})
+        self.assertEqual(same, rows[:1] + rows[2:3])
+        self.assertEqual(cross, [rows[1], rows[3]])
 
 
 if __name__ == "__main__":

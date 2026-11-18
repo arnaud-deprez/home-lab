@@ -56,3 +56,14 @@ def scan_local(root: Path, libraries: list, ignore_globs: list) -> list:
                 ordered = sorted((rel[p] for p in same), key=lambda r: (-keep_score(r), r))
                 emit(Decision("identical-bytes", ordered[0], ordered[1:]))
     return rows
+
+
+def split_by_album(rows: list, depth: dict) -> tuple:
+    """(same, cross): rows whose kept and removed files are in the same album folder, and the others.
+    depth: library -> number of path parts that name the album (Amelie: period/event = 3 with the library)."""
+    def album(path: str) -> tuple:
+        parts = path.split("/")
+        return tuple(parts[:depth.get(parts[0], 2)])
+
+    same = [r for r in rows if album(r["keep"]) == album(r["remove"])]
+    return same, [r for r in rows if album(r["keep"]) != album(r["remove"])]

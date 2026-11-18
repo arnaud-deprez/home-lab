@@ -19,7 +19,7 @@ from pathlib import Path
 
 from photolib.archive_dupes import PLAN_COLUMNS, apply_plan, plan_rows, undo_moves
 from photolib.config import load_config
-from photolib.local_dupes import scan_local
+from photolib.local_dupes import scan_local, split_by_album
 
 
 def _root() -> Path:
@@ -44,18 +44,26 @@ def cmd_plan(args) -> int:
     return 0
 
 
-def cmd_scan(args) -> int:
-    cfg = load_config(Path(__file__).with_name("config.json"))
-    rows = scan_local(cfg.root, args.library, cfg.ignore_globs)
-    args.out.mkdir(parents=True, exist_ok=True)
-    with open(args.out / "plan.csv", "w", newline="", encoding="utf-8") as fh:
+def _write_plan(path: Path, rows: list) -> None:
+    with open(path, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, PLAN_COLUMNS)
         w.writeheader()
         w.writerows(rows)
-    print(f"{len({r['group'] for r in rows})} groups of exact duplicates; {len(rows)} files would move "
-          f"({sum(int(r['remove_bytes']) for r in rows) / 1e9:.1f} GB). Full list: {args.out / 'plan.csv'}")
-    for k, n in Counter(r["reason"] for r in rows).most_common():
-        print(f"  {k:16} {n}")
+
+
+def cmd_scan(args) -> int:
+    cfg = load_config(Path(__file__).with_name("config.json"))
+    rows = scan_local(cfg.root, args.library, cfg.ignore_globs)
+    depth = {lib.name: 3 if lib.album_depth == "grandchild" else 2 for lib in cfg.libraries}
+    same, cross = split_by_album(rows, depth)
+    args.out.mkdir(parents=True, exist_ok=True)
+    _write_plan(args.out / "plan.csv", same)
+    _write_plan(args.out / "cross-album.csv", cross)
+    gb = lambda rs: sum(int(r["remove_bytes"]) for r in rs) / 1e9  # noqa: E731
+    print(f"plan.csv         {len(same):5} files in the same album as the copy kept ({gb(same):.1f} GB): safe to apply")
+    print(f"cross-album.csv  {len(cross):5} files whose kept copy is in another album ({gb(cross):.1f} GB): review, "
+          "apply only the rows you want (an album loses the photo)")
+    print(f"Folder: {args.out}")
     return 0
 
 
