@@ -132,6 +132,10 @@ def _sha1(path: Path) -> str:
     return h.hexdigest()
 
 
+def size_of_rows(root: Path, rel_nfc: str) -> int:
+    return local_path(root, rel_nfc).stat().st_size
+
+
 def plan_rows(root: Path, report_csv: Path, include_resized: bool = False, include_leftovers: bool = False) -> list:
     _index_cache.pop(str(root), None)
     groups = _parse_report(report_csv)
