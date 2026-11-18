@@ -37,7 +37,16 @@
         "2012-2013(M1-LLN)",
         "2013-2014(M1-COMMU)",
         "2014-2015(M2-COMMU)",
-        "2015-2016(Recherche d'emploi - Entrée P&T )"
+        "2015-2016(Recherche d'emploi - Entrée P&T )",
+        "2016-2017 (P&T 1)",
+        "2017-2018 (P&T 2)",
+        "2018-2019 (P&T 3)",
+        "2019-2020 (P&T4 - Congé Maternité)",
+        "2020-2021 (P&T5-RH1)",
+        "2021-2022 (RH2)",
+        "2022-2023 (RH3)",
+        "2023-2024 (RH4)",
+        "2024-2025 (RH5)"
       ],
       "exclude": []
     }
@@ -56,6 +65,16 @@
     "Arnaud/2005 - soirée vacance": "2005-08",
     "Arnaud/2006 - TU": "2006-10",
     "Arnaud/2006 - retour de malte vinz": "2006-02",
-    "Shared/2007 - soirée départ vinz aout": "2007-08"
+    "Shared/2007 - soirée départ vinz aout": "2007-08",
+    "Amelie/2021 - 3) Hivers": "2021-12-01",
+    "Amelie/2004 - 2)Camp scoute": "2004-07-21",
+    "Amelie/2009 - 29) Camp Basse-Bodeux": "2009-07-21",
+    "Amelie/2010 - 12)AnnifMimi": "2010-11-11",
+    "Amelie/2013 - 4)Saint-Torê": "2013-03-21",
+    "Amelie/2010 - 15)AnnifKonincks": "2010-12-11",
+    "Amelie/2021 - 2) Automne": "2021-12-01",
+    "Amelie/2020 - 10) Congé maternité": "2020-03-21",
+    "Amelie/2013 - 5)Soirée90'": "2013-03-29",
+    "Amelie/2018 - 5) Marriage Razieh": "2018-11-18"
   }
 }
