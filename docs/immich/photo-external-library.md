@@ -68,6 +68,29 @@ modification date, which Immich uses; `apply` sets it only when it is wrong (the
 value goes in the undo log). They are not re-encoded (Immich transcodes them for playback). Values that were
 a zero date (`0000:00:00`) cannot be written back by `undo`; they are reported. The hard drive holds the originals.
 
+## Copying to the bucket (euronodes)
+
+`rclone copy` from the Mac to the crypt remote (`crypt:`), which comes from the `RCLONE_CONFIG_*` variables of
+`apps/euronodes/immich/rclone-secret.sops.yaml` (decrypted by you, in your terminal; there is no `rclone.conf`). Check with
+`rclone lsd crypt:`. The proxy in front of S3 refuses single uploads over about 100 MB (`StatusCode: 413`, shown with a
+confusing `invalid character entity &`), so use the same settings as the cluster's rclone mount:
+
+```sh
+cd ~/Pictures/Photos
+F=(--local-unicode-normalization --ignore-case --transfers 4 --checkers 4 --progress
+   --s3-upload-cutoff 50M --s3-chunk-size 32M --s3-disable-http2 --max-connections 8
+   --exclude ".DS_Store" --exclude "*.db" --exclude "*.aae" --exclude "*.thm" --exclude "*.xml"
+   --exclude "*.mcf" --exclude "*.xml~" --exclude "*.wav" --exclude ".device_info_*")
+rclone copy Amelie crypt:external/Amelie "${F[@]}" --exclude "/A trier/**" --dry-run   # then without --dry-run
+rclone check Amelie crypt:external/Amelie "${F[@]}" --size-only --exclude "/A trier/**"   # 0 differences expected
+```
+
+`copy` is safe to repeat: it skips what is already there and sends the rest. An interrupted upload leaves no partial file (S3
+objects are atomic). Without `--one-way`, `check` also lists files that exist only in the bucket (for example stale `.xmp`
+sidecars, which Immich would read as dates: delete them with `rclone delete crypt:external/<Library> --include "*.xmp"`).
+To move a folder between libraries, rename it on the Mac and use `rclone move` between the two bucket paths, then
+`rclone rmdirs` on the old (empty) folder.
+
 ## Albums and sharing
 
 [`scripts/photo-library/create-albums.sh`](../../scripts/photo-library/create-albums.sh) creates one album per folder and shares

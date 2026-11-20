@@ -171,9 +171,10 @@ Immich (upload it again) rather than into the bucket by hand: Immich also needs 
 2. Pause Immich and the jobs (`backup-restore.md`, section 5 top).
 3. Copy, with progress. rclone skips what is already there, so it can be interrupted and restarted:
    ```sh
-   rclone copy /Volumes/Backup/immich/library crypt:library --transfers 8 --progress
-   rclone copy /Volumes/Backup/immich/upload  crypt:upload  --transfers 8 --progress
-   rclone copy /Volumes/Backup/immich/external crypt:external --transfers 8 --progress   # if the disk has it
+   S3=(--s3-upload-cutoff 50M --s3-chunk-size 32M --s3-disable-http2 --max-connections 8)   # see the pitfalls table
+   rclone copy /Volumes/Backup/immich/library crypt:library --transfers 8 --progress "${S3[@]}"
+   rclone copy /Volumes/Backup/immich/upload  crypt:upload  --transfers 8 --progress "${S3[@]}"
+   rclone copy /Volumes/Backup/immich/external crypt:external --transfers 8 --progress "${S3[@]}"   # if the disk has it
    echo ok | rclone rcat crypt:.mounted            # marker Immich and the backup job wait for
    ```
    The `.immich` marker files inside `library/` and `upload/` are on the disk and come back with the folders. The
@@ -252,6 +253,8 @@ The output names the files.
 | Symptom | Cause and fix |
 | ------- | ------------- |
 | `crypt:library is empty or unreachable` | Network, wrong S3 keys, or the bucket really is empty. Nothing was changed. Check with `rclone lsd crypt:` after loading the config as in the helpers |
+| `StatusCode: 413` (and `invalid character entity &`) while copying **into** the bucket | The proxy in front of S3 refuses single uploads over about 100 MB. Upload bigger files in parts: `--s3-upload-cutoff 50M --s3-chunk-size 32M` (the mount does, the restore command in section 3 does). Downloads are not affected |
+| Connection resets or timeouts while syncing **from** the bucket | Too many parallel requests for the proxy. The script uses `--s3-disable-http2 --max-connections 8`, like the rclone mount; do not remove them |
 | `--max-delete` stops the sync | More files vanished from the source than `MAX_DELETE` allows. Look at the live library before raising it |
 | `… is N days old … the app or its backup job has been broken` | The newest dump on the Storage Box is older than `MAX_DUMP_AGE_DAYS`. Check the jobs (`backup-restore.md` section 3) and the healthchecks.io history; nothing was added to the disk |
 | `no Immich database dump in the latest snapshot` | Same cause, or the snapshot predates Immich's dump job. Look at `restic ls latest` on the Storage Box repo |
