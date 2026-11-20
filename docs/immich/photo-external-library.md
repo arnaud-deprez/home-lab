@@ -21,8 +21,9 @@ Defined in [`scripts/photo-library/config.json`](../../scripts/photo-library/con
 
 - `Shared`, `Arnaud`: every direct sub-folder is an album (`Arnaud/Papa` has no year: its 2 photos keep their dates and are
   listed as `skip-no-year`).
-- `Amelie`: the 13 school periods `2003-2004(3e)` to `2015-2016(Recherche d'emploi - Entrée P&T )`: every *event* folder
-  under a period is an album (the period is not in the name). Add later periods to `include`.
+- `Amelie`: the 22 school periods `2003-2004(3e)` to `2024-2025 (RH5)` (not `A trier`): every *event* folder under a period is an
+  album (the period is not in the name). Every event folder needs a `YYYY - ` prefix (the `YYYY-YYYY - ZzZ` leftovers folders were
+  renamed to the ending year). Add later periods to `include`.
 - Album name = the folder name. `python3 scripts/photo-library/list_albums.py <phase>` lists them and any name that
   would collide. macOS stores some names decomposed (NFD: `é` as `e` + accent); all names and filters are compared
   normalised to NFC. Make sure the copy to S3 normalises too (`rclone --local-unicode-normalization`).
@@ -113,7 +114,25 @@ the new albums with the other user. It runs the third-party [immich-folder-album
 
 Version note: the tool's client library targets Immich server **3.3 or newer**; this cluster ran 3.2.0 when the albums were
 created. If the tool fails on the first API calls (before it lists the albums), upgrade Immich first (the check is read-only
-until you confirm). `Amelie` is not supported by the script yet: its events are two levels down (phase 2).
+until you confirm).
+
+`Amelie` is handled with the album levels `2,2` (period/event): the folder two levels below the library names the album, deeper
+sub-folders (`Photos Triées/Civil/…`) go into that event's album, and a file directly in a period folder gets no album. Run it
+with **Amelie's own API key** (she owns that library) and `SHARE_WITH` set to the other user.
+
+### Renaming or moving a folder after it was scanned
+
+Immich identifies an external photo by its **path**. A renamed or moved folder is therefore a set of *new* photos, and the
+old ones turn offline. The album tool matches albums by **name**. To keep the album (and its shares) instead of getting a second one:
+
+1. Rename or move the folder on the Mac, then in the bucket (`rclone move`, then `rclone rmdirs` on the empty old folder).
+2. In Immich, rename the album to the new folder name, exactly (`2015 - 5) New-York` becomes `2015 - New-York`).
+3. Rescan the library (Administration → Libraries): the new photos are imported, the old ones go offline.
+4. Run `./create-albums.sh <Library>`: it finds the album by its new name and adds the new photos.
+5. Administration → Libraries → the library's menu → **Remove offline files**; the album then only holds the new photos.
+
+A folder moved to **another library** (for example `Amelie` to `Shared`) was never scanned in the old one if you move it before
+the first scan: nothing to clean up, the new library just creates the album.
 
 ## Duplicates with older uploads
 
