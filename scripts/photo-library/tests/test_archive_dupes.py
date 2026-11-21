@@ -128,6 +128,19 @@ class PlanApplyTest(unittest.TestCase):
         self.assertEqual([(r["reason"], r["keep"], r["remove"]) for r in rows],
                          [("identical", "Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg")])
 
+    def test_uploaded_copies_in_the_group_are_ignored_and_the_archive_files_still_planned(self):
+        p = self.out / "report-with-upload.csv"
+        with open(p, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["group", "tier", "reason", "count", "photos"])
+            w.writerow(["g1", "B", "multi-external", 3,
+                        "/data/library/amelie/2022/2022-03-14/DSCN0001.jpg 1x1"
+                        " | /mnt/rclone/external/Shared/2008 - é/DSCN0001.JPG 1x1"
+                        " | /mnt/rclone/external/Shared/2008 - é/n1_2_3_n.jpg 1x1"])
+        rows = plan_rows(self.root, p)
+        self.assertEqual([(r["reason"], r["keep"], r["remove"]) for r in rows],
+                         [("identical", "Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg")])
+
     def test_a_group_with_a_file_that_is_gone_is_skipped_not_fatal(self):
         rows = plan_rows(self.root, self.report("Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/already-moved.jpg"))
         self.assertEqual([(r["reason"], r["remove"]) for r in rows], [("missing-file", "")])

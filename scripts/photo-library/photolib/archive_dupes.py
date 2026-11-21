@@ -120,9 +120,12 @@ def _parse_report(report_csv: Path) -> list:
             photos = []
             for item in r["photos"].split(" | "):
                 path, _, wh = item.rpartition(" ")
+                if not path.startswith(EXTERNAL_PREFIX):
+                    continue   # an uploaded copy in the same group: dedupe.py handles it, not the archive
                 w, h = (int(x) for x in wh.split("x"))
                 photos.append((_nfc(path[len(EXTERNAL_PREFIX):]), w, h))
-            groups.append((r["group"], photos))
+            if len(photos) > 1:
+                groups.append((r["group"], photos))
     return groups
 
 
