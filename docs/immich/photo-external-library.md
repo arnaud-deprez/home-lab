@@ -159,6 +159,12 @@ uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   #
 uv run dedupe.py undo --log ~/dedupe-1/log.jsonl  # if something is wrong
 ```
 
+Burst shots: Immich groups consecutive frames, so an upload can sit in a group with **several** external photos, which the tool
+leaves alone by default. With `--match-names` (the same flag for `report` and `apply`) such an upload is trashed too when exactly
+one external photo has the same file name (any case or extension), the same owner and the same pixel size (rotation ignored);
+ambiguous cases (two external files with that name, another size) stay untouched. The report column `pairs` shows each upload
+with the external photo it is matched to: review it before `apply`.
+
 Do not empty Immich's trash until you are sure, and not before the first backup of `external/` has run.
 
 ### Duplicates inside the archive

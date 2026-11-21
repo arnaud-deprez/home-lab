@@ -18,6 +18,7 @@ class Verdict:
     external: Optional[dict] = None
     trash: list = field(default_factory=list)
     assets: list = field(default_factory=list)
+    pairs: list = field(default_factory=list)   # (uploaded copy, the external photo it is a copy of)
 
 
 def _usable(a: dict) -> bool:
@@ -29,9 +30,29 @@ def _ratio(a: dict) -> float:
     return max(w, h) / min(w, h)
 
 
-def classify(group: dict) -> Verdict:
+def _stem(a: dict) -> str:
+    return a["originalPath"].rsplit("/", 1)[-1].rsplit(".", 1)[0].casefold()
+
+
+def _same_size(a: dict, b: dict) -> bool:
+    return sorted((a["width"], a["height"])) == sorted((b["width"], b["height"]))
+
+
+def _match_by_name(ups: list, ext: list) -> list:
+    """A burst (several external photos) with uploads: an upload is paired with an external photo only if exactly one
+    external photo has the same file name (any case or extension), the same owner and the same pixel size."""
+    pairs = []
+    for u in ups:
+        same = [e for e in ext if _stem(e) == _stem(u) and e.get("ownerId") == u.get("ownerId") and _same_size(e, u)]
+        if len(same) == 1:
+            pairs.append((u, same[0]))
+    return pairs
+
+
+def classify(group: dict, match_names: bool = False) -> Verdict:
     """One duplicate group -> verdict. The external-library photo always wins, but never at the price of
-    quality: an uploaded copy is only trashed if it is not larger than the external one."""
+    quality: an uploaded copy is only trashed if it is not larger than the external one.
+    match_names: also pair the uploads of a group with several external photos by file name and size."""
     assets = group["assets"]
     v = Verdict(group["duplicateId"], "B", "", assets=assets)
     ext = [a for a in assets if a["originalPath"].startswith(EXTERNAL_PREFIX)]
@@ -42,6 +63,11 @@ def classify(group: dict) -> Verdict:
         v.reason = "no-external"
     elif len(ext) > 1:
         v.reason = "multi-external"
+        if match_names and ups and all(_usable(a) and a.get("width") and a.get("height") for a in assets):
+            pairs = _match_by_name(ups, ext)
+            if pairs:
+                v.tier, v.reason, v.pairs = "A", "name-match", pairs
+                v.trash, v.external = [u for u, _ in pairs], pairs[0][1]
     elif not ups:
         v.reason = "no-upload"
     else:
@@ -59,6 +85,7 @@ def classify(group: dict) -> Verdict:
             v.reason = "uploaded-larger"
         else:
             v.tier, v.reason, v.trash = "A", "ok", ups
+            v.pairs = [(u, e) for u in ups]
     return v
 
 
@@ -70,20 +97,26 @@ def apply_verdicts(client, verdicts: list, log_path: Path, limit: Optional[int] 
         todo = todo[:limit]
     trashed = 0
     for v in todo:
-        e = v.external
+        by_external: dict = {}
+        for u, e in v.pairs:
+            by_external.setdefault(e["id"], (e, []))[1].append(u)
+        album_ids_all = []
+        for e, uploads in by_external.values():
+            album_ids = []
+            for u in uploads:
+                for aid in client.albums_of(u["id"]):
+                    if aid not in album_ids:
+                        album_ids.append(aid)
+            if album_ids:
+                client.add_to_albums(album_ids, [e["id"]])
+            if any(u.get("isFavorite") for u in uploads) and not e.get("isFavorite"):
+                client.set_favorite([e["id"]])
+            album_ids_all.extend(a for a in album_ids if a not in album_ids_all)
         trash_ids = [u["id"] for u in v.trash]
-        album_ids = []
-        for uid in trash_ids:
-            for aid in client.albums_of(uid):
-                if aid not in album_ids:
-                    album_ids.append(aid)
-        if album_ids:
-            client.add_to_albums(album_ids, [e["id"]])
-        if any(u.get("isFavorite") for u in v.trash) and not e.get("isFavorite"):
-            client.set_favorite([e["id"]])
         with open(log_path, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"group": v.group_id, "external": e["id"], "trashed": trash_ids,
-                                 "albums": album_ids}) + "\n")
+            fh.write(json.dumps({"group": v.group_id, "external": v.external["id"], "trashed": trash_ids,
+                                 "albums": album_ids_all,
+                                 "pairs": [[u["id"], e["id"]] for u, e in v.pairs]}) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
         client.trash(trash_ids)
@@ -102,7 +135,7 @@ def undo_trash(client, log_path: Path) -> int:
 
 
 REPORT_COLUMNS = ["group", "tier", "reason", "external_id", "external_path", "external_wxh",
-                  "trash_ids", "trash_paths", "trash_wxh", "count", "photos"]
+                  "trash_ids", "trash_paths", "trash_wxh", "count", "photos", "pairs"]
 
 
 def summarize(verdicts: list) -> dict:
@@ -127,4 +160,5 @@ def write_report(verdicts: list, path: Path) -> None:
                         e["id"] if e else "", e["originalPath"] if e else "", wxh(e) if e else "",
                         " ".join(a["id"] for a in v.trash), " | ".join(a["originalPath"] for a in v.trash),
                         " ".join(wxh(a) for a in v.trash),
-                        len(v.assets), " | ".join(f"{a['originalPath']} {wxh(a)}" for a in v.assets)])
+                        len(v.assets), " | ".join(f"{a['originalPath']} {wxh(a)}" for a in v.assets),
+                        " | ".join(f"{u['originalPath']} -> {e['originalPath']}" for u, e in v.pairs)])

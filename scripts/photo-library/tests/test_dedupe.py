@@ -146,6 +146,73 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(len(self.log.read_text().splitlines()), 2)
 
 
+class MatchNamesTest(unittest.TestCase):
+    """Groups with several external photos (a burst) and an upload: the upload is trashed only when exactly one
+    external photo has the same file name (any case, any extension) and the same pixel size."""
+
+    def burst(self, *extra, up="IMG_6641.jpg", **upkw):
+        return group(asset("e1", EXT + "IMG_6641.JPG"), asset("e2", EXT + "IMG_6642.JPG"),
+                     asset("u", UP + up, **upkw), *extra)
+
+    def test_off_by_default(self):
+        v = classify(self.burst())
+        self.assertEqual((v.tier, v.reason), ("B", "multi-external"))
+
+    def test_upload_with_the_same_name_and_size_as_one_external_is_trashed(self):
+        v = classify(self.burst(), match_names=True)
+        self.assertEqual((v.tier, v.reason, [a["id"] for a in v.trash], v.external["id"]),
+                         ("A", "name-match", ["u"], "e1"))
+        self.assertEqual([(u["id"], e["id"]) for u, e in v.pairs], [("u", "e1")])
+
+    def test_name_and_extension_case_do_not_matter(self):
+        v = classify(group(asset("e1", EXT + "img_6641.JPEG"), asset("e2", EXT + "IMG_6642.JPG"),
+                           asset("u", UP + "IMG_6641.jpg")), match_names=True)
+        self.assertEqual(v.tier, "A")
+
+    def test_rotated_size_counts_as_the_same(self):
+        v = classify(self.burst(w=1200, h=1600), match_names=True)
+        self.assertEqual(v.tier, "A")
+
+    def test_same_name_but_another_size_is_not_a_match(self):
+        v = classify(self.burst(w=800, h=600), match_names=True)
+        self.assertEqual((v.tier, v.reason), ("B", "multi-external"))
+
+    def test_two_external_files_with_that_name_are_ambiguous(self):
+        v = classify(group(asset("e1", EXT + "IMG_6641.JPG"), asset("e2", EXT + "IMG_6641.HEIC"),
+                           asset("u", UP + "IMG_6641.jpg")), match_names=True)
+        self.assertEqual((v.tier, v.reason), ("B", "multi-external"))
+
+    def test_another_owner_is_not_a_match(self):
+        v = classify(self.burst(owner="u2"), match_names=True)
+        self.assertEqual(v.tier, "B")
+
+    def test_only_the_matching_upload_is_trashed(self):
+        v = classify(self.burst(asset("u2", UP + "other.jpg")), match_names=True)
+        self.assertEqual([a["id"] for a in v.trash], ["u"])
+
+    def test_a_group_without_uploads_stays_multi_external(self):
+        v = classify(group(asset("e1", EXT + "a.jpg"), asset("e2", EXT + "a.JPG")), match_names=True)
+        self.assertEqual((v.tier, v.reason), ("B", "multi-external"))
+
+    def test_offline_or_missing_size_stays_manual(self):
+        v = classify(self.burst(offline=True), match_names=True)
+        self.assertEqual(v.tier, "B")
+
+    def test_albums_and_favorite_go_to_the_matching_external_of_each_upload(self):
+        g = group(asset("e1", EXT + "a.jpg"), asset("e2", EXT + "b.jpg"),
+                  asset("u1", UP + "A.jpg", fav=True), asset("u2", UP + "b.jpg"))
+        v = classify(g, match_names=True)
+        with tempfile.TemporaryDirectory() as d:
+            c = FakeClient({"u1": ["alb1"], "u2": ["alb2"]})
+            apply_verdicts(c, [v], Path(d) / "log.jsonl")
+            log = json.loads((Path(d) / "log.jsonl").read_text())
+        self.assertIn(("add_to_albums", ["alb1"], ["e1"]), c.calls)
+        self.assertIn(("add_to_albums", ["alb2"], ["e2"]), c.calls)
+        self.assertIn(("set_favorite", ["e1"]), c.calls)
+        self.assertEqual(c.calls[-1], ("trash", ["u1", "u2"]))
+        self.assertEqual(sorted(log["trashed"]), ["u1", "u2"])
+
+
 class ReportTest(unittest.TestCase):
     def test_summary_counts_by_tier_and_reason_and_report_lists_every_group(self):
         vs = [classify(group(asset("e1", EXT + "a.jpg"), asset("u1", UP + "x.jpg"), gid="g1")),
