@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Create the Immich albums of one external library from its folders, and share them.
+# Shared, Arnaud: one album per direct sub-folder. Amelie: one album per event folder, two levels down (period/event);
+# deeper sub-folders go into the event's album, and files directly in a period folder get no album.
 # Runbook: docs/immich/photo-external-library.md
 #
 #   export IMMICH_URL=https://immich.vps.powple.com     # the server, without /api
 #   export IMMICH_API_KEY=...                           # of the library OWNER (see the runbook for the permissions)
 #   export SHARE_WITH="<the other user's name or email>"   # optional: share each new album with them (viewer)
-#   ./create-albums.sh Shared          # then: ./create-albums.sh Arnaud
+#   ./create-albums.sh Shared          # then Arnaud, then Amelie (with Amelie's own key: she owns that library)
 #
 # It lists the albums it would create and asks before doing anything (UNATTENDED=1 skips the question).
 # Only new albums are created and shared; existing albums are only completed with new photos.
@@ -18,13 +20,14 @@ TOOL_SHA256_SCRIPT=84386fd19302938c52cf335b379240ec0a8207ddc03006339d4870e668123
 TOOL_SHA256_REQS=a08a4fbb363c975448f3ebc98bdd21931aa6f32688cee62ca4c189f68ba59044
 ROOT=${EXTERNAL_ROOT:-/mnt/rclone/external}               # where the library folders are, as Immich sees them
 
-LIBRARY=${1:?usage: $0 <Shared|Arnaud> [extra album tool arguments]}; shift
+LIBRARY=${1:?usage: $0 <Shared|Arnaud|Amelie> [extra album tool arguments]}; shift
 : "${IMMICH_URL:?set IMMICH_URL, e.g. https://immich.example.com}"
 : "${IMMICH_API_KEY:?set IMMICH_API_KEY (never put it on the command line)}"
 
 case "$LIBRARY" in
   Shared|Arnaud) LEVELS=1 ;;     # album = each direct sub-folder of the library
-  *) echo "ERROR: '$LIBRARY' is not supported yet (Amelie comes with phase 2: events are two levels down)" >&2; exit 2 ;;
+  Amelie) LEVELS=2,2 ;;          # album = the folder two levels down (period/event): only that level names the album
+  *) echo "ERROR: '$LIBRARY' is not supported (Shared, Arnaud or Amelie)" >&2; exit 2 ;;
 esac
 
 HERE=$(cd "$(dirname "$0")" && pwd)

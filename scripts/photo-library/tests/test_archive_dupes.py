@@ -23,6 +23,15 @@ class ScoreTest(unittest.TestCase):
         self.assertGreater(keep_score("Arnaud/2006 - TU/DSCN2857.JPG"), keep_score("Arnaud/2006 - vrac/DSCN2857.JPG"))
 
 
+    def test_curated_folders_beat_exports_copies_and_junk_folders(self):
+        base = "Amelie/p/2017 - Wedding/"
+        good = keep_score(base + "Photos Triées/Civil/a.jpg")
+        for bad in ("Amelie Arnaid/PRINT/a.jpg", "Amelie Arnaid/PRINT - Copie/a.jpg", "Wedding Phone/copie/a.jpg"):
+            self.assertGreater(good, keep_score(base + bad), bad)
+        self.assertGreater(keep_score("Amelie/p/2009 - Roman photo/a.jpg"), keep_score("Amelie/p/2008-2009 - ZzZ/a.jpg"))
+        self.assertGreater(keep_score("Amelie/p/5)Eté/a.jpg"), keep_score("Amelie/p/CEWE 2022/a.jpg"))
+
+
 class DecideTest(unittest.TestCase):
     def test_identical_pixels_keep_the_best_named_one(self):
         d = decide([info("Shared/a/n658828888_746169_1605.jpg"), info("Shared/a/depart skip.jpg")])
@@ -116,6 +125,19 @@ class PlanApplyTest(unittest.TestCase):
 
     def test_plan_finds_identical_pixels_even_when_the_exif_differs(self):
         rows = plan_rows(self.root, self.report("Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg"))
+        self.assertEqual([(r["reason"], r["keep"], r["remove"]) for r in rows],
+                         [("identical", "Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg")])
+
+    def test_uploaded_copies_in_the_group_are_ignored_and_the_archive_files_still_planned(self):
+        p = self.out / "report-with-upload.csv"
+        with open(p, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["group", "tier", "reason", "count", "photos"])
+            w.writerow(["g1", "B", "multi-external", 3,
+                        "/data/library/amelie/2022/2022-03-14/DSCN0001.jpg 1x1"
+                        " | /mnt/rclone/external/Shared/2008 - é/DSCN0001.JPG 1x1"
+                        " | /mnt/rclone/external/Shared/2008 - é/n1_2_3_n.jpg 1x1"])
+        rows = plan_rows(self.root, p)
         self.assertEqual([(r["reason"], r["keep"], r["remove"]) for r in rows],
                          [("identical", "Shared/2008 - é/DSCN0001.JPG", "Shared/2008 - é/n1_2_3_n.jpg")])
 

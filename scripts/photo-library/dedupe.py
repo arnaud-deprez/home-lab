@@ -11,6 +11,10 @@ Only groups with exactly one external photo and uploaded copies that are not lar
 touched (tier A). Everything else is only listed. Uploaded copies go to Immich's trash, never deleted for good. Their albums
 and favorite mark are copied to the external photo first. Key permissions: duplicate.read, album.read, albumAsset.create,
 asset.update, asset.delete.
+
+With --match-names (report and apply), the uploads in a group with several external photos (burst shots) are trashed too
+when exactly one external photo has the same file name (any case or extension), owner and pixel size; the report column
+`pairs` lists each upload with the external photo it is matched to. Anything ambiguous is left alone.
 """
 import argparse
 import os
@@ -19,6 +23,10 @@ from pathlib import Path
 
 from photolib.dedupe import apply_verdicts, classify, summarize, undo_trash, write_report
 from photolib.immich import ImmichClient
+
+
+MATCH_HELP = ("also trash the upload of a photo that sits in a group of several external photos (a burst), if exactly one "
+              "external photo has the same file name and pixel size; use the same flag for report and apply")
 
 
 def _client() -> ImmichClient:
@@ -33,7 +41,7 @@ def _show(a: dict) -> str:
 
 
 def cmd_report(args) -> int:
-    verdicts = [classify(g) for g in _client().get_duplicates()]
+    verdicts = [classify(g, args.match_names) for g in _client().get_duplicates()]
     args.out.mkdir(parents=True, exist_ok=True)
     write_report(verdicts, args.out / "report.csv")
     s = summarize(verdicts)
@@ -58,7 +66,7 @@ def cmd_report(args) -> int:
 
 
 def cmd_apply(args) -> int:
-    verdicts = [classify(g) for g in _client().get_duplicates()]
+    verdicts = [classify(g, args.match_names) for g in _client().get_duplicates()]
     todo = [v for v in verdicts if v.tier == "A"]
     if args.limit is not None:
         todo = todo[:args.limit]
@@ -83,9 +91,11 @@ def main(argv) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("report")
     r.add_argument("--out", type=Path, required=True)
+    r.add_argument("--match-names", action="store_true", dest="match_names", help=MATCH_HELP)
     a = sub.add_parser("apply")
     a.add_argument("--log", type=Path, required=True)
     a.add_argument("--limit", type=int)
+    a.add_argument("--match-names", action="store_true", dest="match_names", help=MATCH_HELP)
     a.add_argument("--yes-trash", type=int, required=True, dest="yes_trash")
     u = sub.add_parser("undo")
     u.add_argument("--log", type=Path, required=True)

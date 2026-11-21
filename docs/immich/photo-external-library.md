@@ -21,8 +21,9 @@ Defined in [`scripts/photo-library/config.json`](../../scripts/photo-library/con
 
 - `Shared`, `Arnaud`: every direct sub-folder is an album (`Arnaud/Papa` has no year: its 2 photos keep their dates and are
   listed as `skip-no-year`).
-- `Amelie`: the 13 school periods `2003-2004(3e)` to `2015-2016(Recherche d'emploi - Entrée P&T )`: every *event* folder
-  under a period is an album (the period is not in the name). Add later periods to `include`.
+- `Amelie`: the 22 school periods `2003-2004(3e)` to `2024-2025 (RH5)` (not `A trier`): every *event* folder under a period is an
+  album (the period is not in the name). Every event folder needs a `YYYY - ` prefix (the `YYYY-YYYY - ZzZ` leftovers folders were
+  renamed to the ending year). Add later periods to `include`.
 - Album name = the folder name. `python3 scripts/photo-library/list_albums.py <phase>` lists them and any name that
   would collide. macOS stores some names decomposed (NFD: `é` as `e` + accent); all names and filters are compared
   normalised to NFC. Make sure the copy to S3 normalises too (`rclone --local-unicode-normalization`).
@@ -68,6 +69,29 @@ modification date, which Immich uses; `apply` sets it only when it is wrong (the
 value goes in the undo log). They are not re-encoded (Immich transcodes them for playback). Values that were
 a zero date (`0000:00:00`) cannot be written back by `undo`; they are reported. The hard drive holds the originals.
 
+## Copying to the bucket (euronodes)
+
+`rclone copy` from the Mac to the crypt remote (`crypt:`), which comes from the `RCLONE_CONFIG_*` variables of
+`apps/euronodes/immich/rclone-secret.sops.yaml` (decrypted by you, in your terminal; there is no `rclone.conf`). Check with
+`rclone lsd crypt:`. The proxy in front of S3 refuses single uploads over about 100 MB (`StatusCode: 413`, shown with a
+confusing `invalid character entity &`), so use the same settings as the cluster's rclone mount:
+
+```sh
+cd ~/Pictures/Photos
+F=(--local-unicode-normalization --ignore-case --transfers 4 --checkers 4 --progress
+   --s3-upload-cutoff 50M --s3-chunk-size 32M --s3-disable-http2 --max-connections 8
+   --exclude ".DS_Store" --exclude "*.db" --exclude "*.aae" --exclude "*.thm" --exclude "*.xml"
+   --exclude "*.mcf" --exclude "*.xml~" --exclude "*.wav" --exclude ".device_info_*")
+rclone copy Amelie crypt:external/Amelie "${F[@]}" --exclude "/A trier/**" --dry-run   # then without --dry-run
+rclone check Amelie crypt:external/Amelie "${F[@]}" --size-only --exclude "/A trier/**"   # 0 differences expected
+```
+
+`copy` is safe to repeat: it skips what is already there and sends the rest. An interrupted upload leaves no partial file (S3
+objects are atomic). Without `--one-way`, `check` also lists files that exist only in the bucket (for example stale `.xmp`
+sidecars, which Immich would read as dates: delete them with `rclone delete crypt:external/<Library> --include "*.xmp"`).
+To move a folder between libraries, rename it on the Mac and use `rclone move` between the two bucket paths, then
+`rclone rmdirs` on the old (empty) folder.
+
 ## Albums and sharing
 
 [`scripts/photo-library/create-albums.sh`](../../scripts/photo-library/create-albums.sh) creates one album per folder and shares
@@ -86,11 +110,33 @@ the new albums with the other user. It runs the third-party [immich-folder-album
    ./create-albums.sh Shared                              # lists the albums, asks before creating; then Arnaud
    ```
 3. Check the albums in Immich, and that the other user sees them. Re-running is safe: existing albums only get new photos, and
-   only newly created albums are shared.
+   only newly created albums are shared. If you forgot `SHARE_WITH`, run it again with both
+   `--update-album-props-mode 2 --find-assets-in-albums` (`./create-albums.sh Amelie --update-album-props-mode 2
+   --find-assets-in-albums`): by default the tool only looks at photos that are in **no** album yet (so it finds nothing:
+   `0 albums identified`), and only shares the albums it creates. With these options it shares the existing albums too, and
+   removes any user that is not in `SHARE_WITH` from them.
 
 Version note: the tool's client library targets Immich server **3.3 or newer**; this cluster ran 3.2.0 when the albums were
 created. If the tool fails on the first API calls (before it lists the albums), upgrade Immich first (the check is read-only
-until you confirm). `Amelie` is not supported by the script yet: its events are two levels down (phase 2).
+until you confirm).
+
+`Amelie` is handled with the album levels `2,2` (period/event): the folder two levels below the library names the album, deeper
+sub-folders (`Photos Triées/Civil/…`) go into that event's album, and a file directly in a period folder gets no album. Run it
+with **Amelie's own API key** (she owns that library) and `SHARE_WITH` set to the other user.
+
+### Renaming or moving a folder after it was scanned
+
+Immich identifies an external photo by its **path**. A renamed or moved folder is therefore a set of *new* photos, and the
+old ones turn offline. The album tool matches albums by **name**. To keep the album (and its shares) instead of getting a second one:
+
+1. Rename or move the folder on the Mac, then in the bucket (`rclone move`, then `rclone rmdirs` on the empty old folder).
+2. In Immich, rename the album to the new folder name, exactly (`2015 - 5) New-York` becomes `2015 - New-York`).
+3. Rescan the library (Administration → Libraries): the new photos are imported, the old ones go offline.
+4. Run `./create-albums.sh <Library>`: it finds the album by its new name and adds the new photos.
+5. Administration → Libraries → the library's menu → **Remove offline files**; the album then only holds the new photos.
+
+A folder moved to **another library** (for example `Amelie` to `Shared`) was never scanned in the old one if you move it before
+the first scan: nothing to clean up, the new library just creates the album.
 
 ## Duplicates with older uploads
 
@@ -112,10 +158,16 @@ cd scripts/photo-library
 export IMMICH_URL=https://immich.vps.powple.com
 read -rs IMMICH_API_KEY && export IMMICH_API_KEY
 uv run dedupe.py report --out ~/dedupe-1          # read-only: counts per reason, examples, report.csv
-uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   # pilot: N is printed if you omit it
+uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   # pilot: N = number of uploaded photos it would trash (a wrong N is refused and the right one printed)
 # check the 10 groups in Immich (albums, favorites, the external photos are still there), then without --limit
 uv run dedupe.py undo --log ~/dedupe-1/log.jsonl  # if something is wrong
 ```
+
+Burst shots: Immich groups consecutive frames, so an upload can sit in a group with **several** external photos, which the tool
+leaves alone by default. With `--match-names` (the same flag for `report` and `apply`) such an upload is trashed too when exactly
+one external photo has the same file name (any case or extension), the same owner and the same pixel size (rotation ignored);
+ambiguous cases (two external files with that name, another size) stay untouched. The report column `pairs` shows each upload
+with the external photo it is matched to: review it before `apply`.
 
 Do not empty Immich's trash until you are sure, and not before the first backup of `external/` has run.
 

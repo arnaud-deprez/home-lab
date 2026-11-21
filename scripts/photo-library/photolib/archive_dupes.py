@@ -55,8 +55,13 @@ def keep_score(path: str) -> int:
         score -= 10
     if _CAMERA.match(name):
         score += 3
-    if any("vrac" in f.lower() for f in folders):
+    low = [f.lower() for f in folders]
+    if any("vrac" in f or "zzz" in f or "cewe" in f or "copie" in f or "copy" in f for f in low):
         score -= 5
+    if any(f == "print" or f.startswith("print ") for f in low):
+        score -= 2   # exports for printing
+    if any("triée" in f or "triee" in f for f in low):
+        score += 4   # hand-curated sub-folder
     return score
 
 
@@ -115,9 +120,12 @@ def _parse_report(report_csv: Path) -> list:
             photos = []
             for item in r["photos"].split(" | "):
                 path, _, wh = item.rpartition(" ")
+                if not path.startswith(EXTERNAL_PREFIX):
+                    continue   # an uploaded copy in the same group: dedupe.py handles it, not the archive
                 w, h = (int(x) for x in wh.split("x"))
                 photos.append((_nfc(path[len(EXTERNAL_PREFIX):]), w, h))
-            groups.append((r["group"], photos))
+            if len(photos) > 1:
+                groups.append((r["group"], photos))
     return groups
 
 
@@ -130,6 +138,10 @@ def _sha1(path: Path) -> str:
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def size_of_rows(root: Path, rel_nfc: str) -> int:
+    return local_path(root, rel_nfc).stat().st_size
 
 
 def plan_rows(root: Path, report_csv: Path, include_resized: bool = False, include_leftovers: bool = False) -> list:

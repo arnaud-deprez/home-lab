@@ -2,6 +2,7 @@
 """Remove redundant copies from the photo archive on the Mac, reversibly (they go to a quarantine folder).
 
   uv run archive_dupes.py plan  --report ~/dedupe-2/report.csv --out ~/archive-dupes-1   read-only: plan.csv + summary
+  uv run archive_dupes.py scan  --library Amelie --out ~/amelie-dupes   exact duplicates on disk, read-only
   uv run archive_dupes.py apply ~/archive-dupes-1/plan.csv --quarantine ~/Pictures/Photos-removed --yes-move <N>
   uv run archive_dupes.py undo  ~/archive-dupes-1/moves.csv
 
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from photolib.archive_dupes import PLAN_COLUMNS, apply_plan, plan_rows, undo_moves
 from photolib.config import load_config
+from photolib.local_dupes import scan_local, split_by_album
 
 
 def _root() -> Path:
@@ -39,6 +41,29 @@ def cmd_plan(args) -> int:
     print(f"\n{len(todo)} files would move to the quarantine. Full list: {args.out / 'plan.csv'}")
     for r in todo[:4]:
         print(f"  keep  {r['keep']}\n  move  {r['remove']}  ({r['reason']})")
+    return 0
+
+
+def _write_plan(path: Path, rows: list) -> None:
+    with open(path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, PLAN_COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def cmd_scan(args) -> int:
+    cfg = load_config(Path(__file__).with_name("config.json"))
+    rows = scan_local(cfg.root, args.library, cfg.ignore_globs)
+    depth = {lib.name: 3 if lib.album_depth == "grandchild" else 2 for lib in cfg.libraries}
+    same, cross = split_by_album(rows, depth)
+    args.out.mkdir(parents=True, exist_ok=True)
+    _write_plan(args.out / "plan.csv", same)
+    _write_plan(args.out / "cross-album.csv", cross)
+    gb = lambda rs: sum(int(r["remove_bytes"]) for r in rs) / 1e9  # noqa: E731
+    print(f"plan.csv         {len(same):5} files in the same album as the copy kept ({gb(same):.1f} GB): safe to apply")
+    print(f"cross-album.csv  {len(cross):5} files whose kept copy is in another album ({gb(cross):.1f} GB): review, "
+          "apply only the rows you want (an album loses the photo)")
+    print(f"Folder: {args.out}")
     return 0
 
 
@@ -71,6 +96,9 @@ def main(argv) -> int:
     p.add_argument("--leftovers", action="store_true",
                    help="also pairs left over, that you have checked by hand: identical files (any name) and, "
                         "for the rest, the smaller file; delete the rows you do not want from plan.csv")
+    sc = sub.add_parser("scan", help="exact duplicates on disk, no Immich needed (read-only: writes plan.csv)")
+    sc.add_argument("--library", action="append", required=True, help="library folder under the photo root; repeatable")
+    sc.add_argument("--out", type=Path, required=True)
     a = sub.add_parser("apply")
     a.add_argument("plan", type=Path)
     a.add_argument("--quarantine", type=Path, required=True)
@@ -78,7 +106,7 @@ def main(argv) -> int:
     u = sub.add_parser("undo")
     u.add_argument("moves", type=Path)
     args = ap.parse_args(argv[1:])
-    return {"plan": cmd_plan, "apply": cmd_apply, "undo": cmd_undo}[args.cmd](args)
+    return {"scan": cmd_scan, "plan": cmd_plan, "apply": cmd_apply, "undo": cmd_undo}[args.cmd](args)
 
 
 if __name__ == "__main__":

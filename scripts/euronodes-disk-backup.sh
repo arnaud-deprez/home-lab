@@ -30,7 +30,9 @@ STAMP=$(date +%F)
 PHOTOS=$DEST/immich
 STAGE_ROOT=/tmp/euronodes-disk-backup   # fixed path so restic sees the same paths on every run
 STATE=$DEST/.backup-state
-RC_FLAGS=(--transfers 8 --checkers 16 --stats 30s --stats-one-line --log-level NOTICE)
+# The proxy in front of S3 resets connections under many parallel requests (HTTP/2 GOAWAY): same settings as the
+# rclone mount in apps/euronodes/immich/rclone-mount.yaml.
+RC_FLAGS=(--transfers 8 --checkers 16 --s3-disable-http2 --max-connections 8 --stats 30s --stats-one-line --log-level NOTICE)
 [ -n "${DRY_RUN:-}" ] && RC_FLAGS+=(--dry-run)
 
 die() { echo "ERROR: $*" >&2; exit 1; }
