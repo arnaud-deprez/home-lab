@@ -154,7 +154,7 @@ cd scripts/photo-library
 export IMMICH_URL=https://immich.vps.powple.com
 read -rs IMMICH_API_KEY && export IMMICH_API_KEY
 uv run dedupe.py report --out ~/dedupe-1          # read-only: counts per reason, examples, report.csv
-uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   # pilot: N is printed if you omit it
+uv run dedupe.py apply --log ~/dedupe-1/log.jsonl --limit 10 --yes-trash <N>   # pilot: N = number of uploaded photos it would trash (a wrong N is refused and the right one printed)
 # check the 10 groups in Immich (albums, favorites, the external photos are still there), then without --limit
 uv run dedupe.py undo --log ~/dedupe-1/log.jsonl  # if something is wrong
 ```
