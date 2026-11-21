@@ -110,9 +110,11 @@ the new albums with the other user. It runs the third-party [immich-folder-album
    ./create-albums.sh Shared                              # lists the albums, asks before creating; then Arnaud
    ```
 3. Check the albums in Immich, and that the other user sees them. Re-running is safe: existing albums only get new photos, and
-   only newly created albums are shared. If you forgot `SHARE_WITH`, run it again with `--update-album-props-mode 2`
-   (`./create-albums.sh Amelie --update-album-props-mode 2`): it also shares the existing albums, and removes any user that is
-   not in `SHARE_WITH` from them.
+   only newly created albums are shared. If you forgot `SHARE_WITH`, run it again with both
+   `--update-album-props-mode 2 --find-assets-in-albums` (`./create-albums.sh Amelie --update-album-props-mode 2
+   --find-assets-in-albums`): by default the tool only looks at photos that are in **no** album yet (so it finds nothing:
+   `0 albums identified`), and only shares the albums it creates. With these options it shares the existing albums too, and
+   removes any user that is not in `SHARE_WITH` from them.
 
 Version note: the tool's client library targets Immich server **3.3 or newer**; this cluster ran 3.2.0 when the albums were
 created. If the tool fails on the first API calls (before it lists the albums), upgrade Immich first (the check is read-only
