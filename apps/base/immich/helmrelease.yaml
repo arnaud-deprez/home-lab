@@ -16,6 +16,15 @@ spec:
     remediation:
       retries: 3
   values:
+    # The chart pins appVersion and is not kept in sync with Immich releases, so we
+    # override the image tag ourselves (shared by server + machine-learning). Renovate bumps it.
+    controllers:
+      main:
+        containers:
+          main:
+            image:
+              # renovate: datasource=docker depName=ghcr.io/immich-app/immich-server
+              tag: v3.4.2
     valkey:
       enabled: true
     immich:

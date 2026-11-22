@@ -17,6 +17,12 @@
       "matchStrings": ["factory\\.talos\\.dev/metal-installer/\\w+:(?<currentValue>v[\\d.]+)"],
       "depNameTemplate": "siderolabs/talos",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Immich image tag (chart pins an older appVersion; we override it)",
+      "managerFilePatterns": ["/^apps/base/immich/helmrelease\\.yaml$/"],
+      "matchStrings": ["# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n\\s+tag: (?<currentValue>\\S+)"]
     }
   ],
   "packageRules": [
