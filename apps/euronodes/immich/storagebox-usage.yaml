@@ -21,7 +21,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: check
-              image: restic/restic:0.19.1
+              image: restic/restic:0.20.0
               env:
                 - name: THRESHOLD_PERCENT
                   value: "80"
