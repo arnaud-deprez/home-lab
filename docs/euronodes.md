@@ -20,24 +20,24 @@ Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and 
 
 ## Decisions
 
-| Topic | Decision |
-| ----- | -------- |
-| Topology | One node, control plane and worker |
-| Disk | `EPHEMERAL` capped at 40 GB, `local-path-provisioner` user volume takes the rest; all volumes LUKS2 with the **node-ID key** |
-| Storage engine | `local-path` (one node; replicated engines add nothing) |
-| API exposure | Talos API (50000) and Kubernetes API (6443) are **closed to the internet** by the EuroNodes console firewall and reached over Tailscale only (see _Reaching the cluster_). Only 80 and 443 are open. |
-| Ingress | Traefik terminates TLS on the node (hostPort 80/443); cert-manager, one Let's Encrypt certificate per host over HTTP-01 |
-| Domain | `*.vps.powple.com` (hosts live in `apps/euronodes/*`; see _Changing the public domain_ before changing it) |
-| Immich originals | `library` and `upload` on EuroNodes S3 through an rclone-crypt mount; everything else local |
-| Photo archive | `external/` on the same S3 mount, read-only external libraries in Immich ([`immich/photo-external-library.md`](immich/photo-external-library.md)) |
-| Backups | restic to a Hetzner Storage Box, one repository per app |
+| Topic            | Decision                                                                                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Topology         | One node, control plane and worker                                                                                                                                                                   |
+| Disk             | `EPHEMERAL` capped at 40 GB, `local-path-provisioner` user volume takes the rest; all volumes LUKS2 with the **node-ID key**                                                                         |
+| Storage engine   | `local-path` (one node; replicated engines add nothing)                                                                                                                                              |
+| API exposure     | Talos API (50000) and Kubernetes API (6443) are **closed to the internet** by the EuroNodes console firewall and reached over Tailscale only (see _Reaching the cluster_). Only 80 and 443 are open. |
+| Ingress          | Traefik terminates TLS on the node (hostPort 80/443); cert-manager, one Let's Encrypt certificate per host over HTTP-01                                                                              |
+| Domain           | `*.vps.powple.com` (hosts live in `apps/euronodes/*`; see _Changing the public domain_ before changing it)                                                                                           |
+| Immich originals | `library` and `upload` on EuroNodes S3 through an rclone-crypt mount; everything else local                                                                                                          |
+| Photo archive    | `external/` on the same S3 mount, read-only external libraries in Immich ([`immich/photo-external-library.md`](immich/photo-external-library.md))                                                    |
+| Backups          | restic to a Hetzner Storage Box, one repository per app                                                                                                                                              |
 
 ## Provision the VM
 
 1. Order the VPS (Portugal, 4 vCPU / 8 GB, dedicated IPv4). Hostname `euronodes`.
 2. Generate an Image Factory ISO at [factory.talos.dev](https://factory.talos.dev): bare-metal
    `amd64`, extension `iscsi-tools`. Keep the **schematic ID** (`c9078f94…8bac` for this cluster) and
-   the Talos version (`v1.14.2`).
+   the Talos version.
 3. Attach the ISO and boot. The node is in maintenance mode: anyone can reach its API until a
    config is applied, so apply it promptly.
 4. Read the disk and NIC: `talosctl get disks|links|addresses --insecure -n <ip> -e <ip>`.
@@ -48,12 +48,14 @@ Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and 
 
 ```sh
 export SOPS_AGE_KEY_FILE=~/.config/sops/age/euronodes.agekey
-export E=178.159.34.177 SCHEMATIC=c9078f9419961640c712a8bf2bb9174933dfcf1da383fd8ea2b7dc21493f8bac TALOS_VERSION=v1.14.2
+export E=178.159.34.177
+# TALOS_VERSION (bumped by Renovate PRs) and SCHEMATIC
+source talos/euronodes/talos-version.env
 # tailnet address and name of the Talos API Service (kubectl get service talos-api -n tailscale-operator)
 TS_IP=<tailnet-ip> TS_NAME=<talos-api-euronodes.your-tailnet.ts.net>
 
 # once, never for a live cluster
-talosctl gen secrets -o talos/euronodes/secrets.yaml
+talosctl gen secrets -o talos/euronodes/secrets.yamloui
 sops -e talos/euronodes/secrets.yaml > talos/euronodes/secrets.sops.yaml && rm talos/euronodes/secrets.yaml
 
 # any time (the secrets bundle keeps the PKI stable)
@@ -77,14 +79,14 @@ not exist on a fresh cluster), so they must be passed **every time** you regener
 
 [`talos/euronodes/patch.yaml`](../talos/euronodes/patch.yaml) is a multi-document patch:
 
-| Document | Purpose |
-| -------- | ------- |
-| `HostnameConfig`, `LinkConfig` (`ens18`), `ResolverConfig`, `TimeSyncConfig` | Hostname, static address and route, DNS, NTP |
-| `KubeNodeConfig` | Removes the control-plane taint |
-| `UnattendedInstallConfig` | Installs on `/dev/sda` |
-| `VolumeConfig` `STATE` and `EPHEMERAL` (40 GB), `UserVolumeConfig` `local-path-provisioner` | Layout, each with `encryption: luks2` and `nodeID` key |
-| `UserVolumeConfig` `rclone` (`volumeType: directory`) | A writable `/var/mnt/rclone` for the rclone FUSE mount (`/var/mnt` is read-only for the kubelet) |
-| `SysctlConfig` | Disables IPv6 (`disable_ipv6`), see _Google registry block_ |
+| Document                                                                                    | Purpose                                                                                          |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `HostnameConfig`, `LinkConfig` (`ens18`), `ResolverConfig`, `TimeSyncConfig`                | Hostname, static address and route, DNS, NTP                                                     |
+| `KubeNodeConfig`                                                                            | Removes the control-plane taint                                                                  |
+| `UnattendedInstallConfig`                                                                   | Installs on `/dev/sda`                                                                           |
+| `VolumeConfig` `STATE` and `EPHEMERAL` (40 GB), `UserVolumeConfig` `local-path-provisioner` | Layout, each with `encryption: luks2` and `nodeID` key                                           |
+| `UserVolumeConfig` `rclone` (`volumeType: directory`)                                       | A writable `/var/mnt/rclone` for the rclone FUSE mount (`/var/mnt` is read-only for the kubelet) |
+| `SysctlConfig`                                                                              | Disables IPv6 (`disable_ipv6`), see _Google registry block_                                      |
 
 Encryption can only be set when a volume is created; changing it later means wiping the volume.
 The node-ID key derives from the VM UUID: it protects against a copied disk or snapshot, **not**
@@ -233,11 +235,11 @@ the one-time sign-in links last **one hour**: generate each user's link when the
 
 ## Immich storage
 
-| Data | Where |
-| ---- | ----- |
-| `library`, `upload` (originals) | EuroNodes S3 bucket `home`, prefix `immich/`, through rclone crypt (client-side encrypted, file names too) |
-| `external` (curated photo archive, never edited by Immich) | Same bucket, prefix and crypt: `immich/external/`, read by Immich at `/mnt/rclone/external/<Library>` (the init container creates the folder with a `.keep` marker because S3 has no empty folders; Immich refuses import paths under `/data`, its media location); see [`immich/photo-external-library.md`](immich/photo-external-library.md) |
-| `profile`, `backups` (Immich's nightly DB dumps), `thumbs`, `encoded-video`, ML cache, Postgres | local `local-path` |
+| Data                                                                                            | Where                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library`, `upload` (originals)                                                                 | EuroNodes S3 bucket `home`, prefix `immich/`, through rclone crypt (client-side encrypted, file names too)                                                                                                                                                                                                                                     |
+| `external` (curated photo archive, never edited by Immich)                                      | Same bucket, prefix and crypt: `immich/external/`, read by Immich at `/mnt/rclone/external/<Library>` (the init container creates the folder with a `.keep` marker because S3 has no empty folders; Immich refuses import paths under `/data`, its media location); see [`immich/photo-external-library.md`](immich/photo-external-library.md) |
+| `profile`, `backups` (Immich's nightly DB dumps), `thumbs`, `encoded-video`, ML cache, Postgres | local `local-path`                                                                                                                                                                                                                                                                                                                             |
 
 How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
 
@@ -291,6 +293,7 @@ How it works ([`apps/euronodes/immich/`](../apps/euronodes/immich/)):
   Rebooting the node (`talosctl reboot`) also clears it, with a longer outage.
   Confirm with `talosctl read /proc/self/mountinfo | grep rclone`: a `fuse.rclone` entry with no rclone pod
   running is the stale one.
+
 - Moving an existing library onto the mount: Immich's integrity check refuses to start if the `.immich`
   marker file is missing in `library/` or `upload/`. Copy the markers across from the old volume.
 - Failed or killed uploads can leave partial files on S3 that Immich does not track. Delete them in

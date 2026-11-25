@@ -113,6 +113,7 @@ so you can regenerate the base config or re-apply a changed patch later.
 ```sh
 export CLUSTER_NAME=tierhive
 export NODE_IP=10.10.8.2                # internal IP, not the public one
+source talos/tierhive/talos-version.env # TALOS_VERSION (bumped by Renovate PRs) and SCHEMATIC
 
 # once — never regenerate for a live cluster
 talosctl gen secrets -o talos/tierhive/secrets.yaml
@@ -122,6 +123,7 @@ rm talos/tierhive/secrets.yaml            # keep only the encrypted copy
 # decrypt on the fly (needs the tierhive age key, see flux.md) — no plaintext on disk
 talosctl gen config --with-secrets <(sops -d talos/tierhive/secrets.sops.yaml) \
   --additional-sans 172.99.188.64 \
+  --install-image factory.talos.dev/metal-installer/$SCHEMATIC:$TALOS_VERSION \
   --output-dir talos/tierhive \
   $CLUSTER_NAME https://$NODE_IP:6443
 ```

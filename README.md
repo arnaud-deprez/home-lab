@@ -9,7 +9,7 @@ onto a third one on a [EuroNodes](docs/euronodes.md) VPS.
 | Component                  | Status | Where                                                                                                                                                                                                                                                                                       |
 | -------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Immich                     | ✅     | [`apps/base/immich/`](apps/base/immich/) — CloudNativePG + VectorChord, Valkey, ingress `immich.home.arpa`; SSO login via Pocket ID                                                                                                                                                         |
-| SSO (Pocket ID)            | ✅     | [`apps/base/pocket-id/`](apps/base/pocket-id/) — OIDC provider, passkey login, ingress `id.home.arpa`                                                                                                                                                                               |
+| SSO (Pocket ID)            | ✅     | [`apps/base/pocket-id/`](apps/base/pocket-id/) — OIDC provider, passkey login, ingress `id.home.arpa`                                                                                                                                                                                       |
 | Reverse proxy (Traefik)    | ✅     | [`infrastructure/controllers/base/traefik/`](infrastructure/controllers/base/traefik/) — hostPort DaemonSet                                                                                                                                                                                 |
 | HTTPS / TLS (cert-manager) | ✅     | [`infrastructure/controllers/base/cert-manager/`](infrastructure/controllers/base/cert-manager/) — private CA, per-app certs via ingress-shim                                                                                                                                               |
 | Tailscale                  | ✅     | [`infrastructure/controllers/base/tailscale-operator/`](infrastructure/controllers/base/tailscale-operator/) — Kubernetes operator; exposes the k8s API server (API-server-proxy) and the Talos API for remote admin access over the tailnet — see [`docs/tailscale.md`](docs/tailscale.md) |
@@ -115,12 +115,6 @@ export WORKER_IP=x.x.x.x
 export TALOSCONFIG="$PWD/talos/laptop/talosconfig"
 ```
 
-##### UTM (macos)
-
-On UTM, we need to patch the config to match disk locations ([`talos/laptop/patch.yaml`](talos/laptop/patch.yaml)).
-The patch is applied at `apply-config` time, not at `gen config` time, so the generated
-base config stays unpatched.
-
 ```sh
 # Once: generate the secrets bundle, encrypt it with SOPS, drop the plaintext.
 # Never regenerate it for a live cluster.
@@ -129,8 +123,11 @@ sops -e talos/laptop/secrets.yaml > talos/laptop/secrets.sops.yaml
 rm talos/laptop/secrets.yaml
 
 # Generate the base config from the decrypted secrets (no plaintext on disk)
+# TALOS_VERSION (bumped by Renovate PRs) and SCHEMATIC come from the tracked version file
+source talos/laptop/talos-version.env
 talosctl gen config talos-homelab https://$CONTROL_PLANE_IP:6443 \
   --with-secrets <(sops -d talos/laptop/secrets.sops.yaml) \
+  --install-image factory.talos.dev/metal-installer/$SCHEMATIC:$TALOS_VERSION \
   --output-dir talos/laptop --force
 # Create control plane node, applying the UTM patch
 talosctl apply-config --insecure --nodes $CONTROL_PLANE_IP \
@@ -152,9 +149,37 @@ credentials and are git-ignored; only `secrets.sops.yaml` and the patch are comm
 you lose them, regenerate from the secrets bundle:
 
 ```sh
+source talos/laptop/talos-version.env
 talosctl gen config talos-homelab https://$CONTROL_PLANE_IP:6443 \
-  --with-secrets <(sops -d talos/laptop/secrets.sops.yaml) --output-dir talos/laptop --force
+  --with-secrets <(sops -d talos/laptop/secrets.sops.yaml) \
+  --install-image factory.talos.dev/metal-installer/$SCHEMATIC:$TALOS_VERSION \
+  --output-dir talos/laptop --force
 ```
+
+`talos/<cluster>/talos-version.env` records the Talos version each cluster should run. Renovate opens a PR
+when a new release appears, but merging it changes nothing on the node: upgrade it by hand (see below), ideally
+merging the PR once the upgrade is done so the file reflects reality.
+
+##### Upgrading Talos on a single node
+
+With one node there is nowhere to reschedule the pods, so draining would just evict everything and block
+(PodDisruptionBudgets, e.g. CloudNativePG, can never be satisfied). Skip the drain, and uncordon the node
+afterwards in case it was left cordoned by the reboot:
+
+```sh
+source talos/laptop/talos-version.env   # the version in the merged (or about to be merged) Renovate PR
+talosctl --talosconfig $TALOSCONFIG upgrade --nodes $CONTROL_PLANE_IP --drain=false \
+  --image factory.talos.dev/metal-installer/$SCHEMATIC:$TALOS_VERSION
+
+# the node reboots: wait until it is back and Ready, then
+talosctl --talosconfig $TALOSCONFIG version --nodes $CONTROL_PLANE_IP   # confirm the new version
+kubectl uncordon <node-name>
+kubectl get node
+```
+
+Expect a short outage of every workload while the node reboots. Take an etcd snapshot first
+(`talosctl etcd snapshot db.snapshot`), and for the VPS clusters a restic backup too (see
+[`docs/euronodes.md`](docs/euronodes.md)). Upgrade Kubernetes separately with `talosctl upgrade-k8s`.
 
 Then validate
 

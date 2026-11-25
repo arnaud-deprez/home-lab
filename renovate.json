@@ -12,11 +12,9 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Talos installer image",
-      "managerFilePatterns": ["/^talos/.+/(controlplane|worker)\\.yaml$/"],
-      "matchStrings": ["factory\\.talos\\.dev/metal-installer/\\w+:(?<currentValue>v[\\d.]+)"],
-      "depNameTemplate": "siderolabs/talos",
-      "datasourceTemplate": "github-releases"
+      "description": "Talos version per cluster (controlplane/worker.yaml are git-ignored, so track the version here)",
+      "managerFilePatterns": ["/^talos/[^/]+/talos-version\\.env$/"],
+      "matchStrings": ["# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\nTALOS_VERSION=(?<currentValue>\\S+)"]
     },
     {
       "customType": "regex",
@@ -34,6 +32,15 @@
     {
       "matchUpdateTypes": ["major"],
       "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Talos is upgraded by hand (talosctl upgrade): the PR is a reminder, one per cluster, never automerged",
+      "matchPackageNames": ["siderolabs/talos"],
+      "groupName": null,
+      "separateMinorPatch": true,
+      "automerge": false,
+      "dependencyDashboardApproval": false,
+      "addLabels": ["talos-upgrade"]
     },
     {
       "description": "Stateful or migration-heavy: always review by hand, never grouped",
