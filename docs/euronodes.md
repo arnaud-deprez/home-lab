@@ -12,7 +12,7 @@ Talos files live in [`talos/euronodes/`](../talos/euronodes/): `patch.yaml` and 
 ## What EuroNodes is
 
 - KVM on Proxmox, custom ISO supported, hourly billing. The VM has a **public IPv4 directly on the
-  NIC** (no NAT): `178.159.34.177/24` on `ens18`, gateway `178.159.34.1`. IPv6 is also present.
+  NIC** (no NAT): `178.159.34.177/24` on `ens18`, gateway `178.159.34.1`. IPv6 is also present but disabled on the node (see _Google registry block_).
 - One disk (`/dev/sda`, 161 GB); no detachable block storage. S3-compatible object storage exists
   (Ceph RGW; **requires signature V2**, see _Immich storage_).
 - Plan used: 4 vCPU / 8 GB / 161 GB, dedicated IPv4.
@@ -63,6 +63,16 @@ talosctl gen config --with-secrets <(sops -d talos/euronodes/secrets.sops.yaml) 
   --output-dir talos/euronodes euronodes https://$E:6443
 ```
 
+The SANs live only in the generated, git-ignored `controlplane.yaml`, not in `patch.yaml` (the tailnet values do
+not exist on a fresh cluster), so they must be passed **every time** you regenerate:
+
+- **Fresh deploy:** `TS_IP` and `TS_NAME` do not exist yet (the Tailscale operator is deployed later by Flux). Run
+  the command with `--additional-sans $E` only.
+- **Once the operator is up:** read both values with `kubectl get service talos-api -n tailscale-operator`, rerun
+  the command with `--additional-sans $E,$TS_IP,$TS_NAME` and `--force`, then `apply-config` (no reboot).
+- **Any later regeneration** (Talos upgrade, lost files): pass all three again, otherwise `talosctl` over the
+  tailnet fails with `certificate is valid for …, not 100.x.x.x`.
+
 ### The patch
 
 [`talos/euronodes/patch.yaml`](../talos/euronodes/patch.yaml) is a multi-document patch:
@@ -74,7 +84,7 @@ talosctl gen config --with-secrets <(sops -d talos/euronodes/secrets.sops.yaml) 
 | `UnattendedInstallConfig` | Installs on `/dev/sda` |
 | `VolumeConfig` `STATE` and `EPHEMERAL` (40 GB), `UserVolumeConfig` `local-path-provisioner` | Layout, each with `encryption: luks2` and `nodeID` key |
 | `UserVolumeConfig` `rclone` (`volumeType: directory`) | A writable `/var/mnt/rclone` for the rclone FUSE mount (`/var/mnt` is read-only for the kubelet) |
-| `RegistryMirrorConfig` `registry.k8s.io` | See _Google registry block_ |
+| `SysctlConfig` | Disables IPv6 (`disable_ipv6`), see _Google registry block_ |
 
 Encryption can only be set when a volume is created; changing it later means wiping the volume.
 The node-ID key derives from the VM UUID: it protects against a copied disk or snapshot, **not**
@@ -132,13 +142,20 @@ talosctl -e talos-api-euronodes.<your-tailnet>.ts.net -n 178.159.34.177 version
 
 ### Google registry block
 
-`registry.k8s.io` (and its `europe-west4-docker.pkg.dev` backend) returns **403 to this VM's IP
-range**, intermittently. The patch mirrors `registry.k8s.io` to the Artifact Registry backend, which
-worked at install time but stopped working later (even `etcd` failed to pull). Consequences:
-the control-plane images are cached on the node, but a **Kubernetes or Talos upgrade that pulls new
-`registry.k8s.io` images may fail**; any chart using `registry.k8s.io/sig-storage` images
-(CSI sidecars) cannot start. Raise it with EuroNodes, and plan a mirror (for example copying the
-images to `ghcr.io`) before an upgrade.
+`registry.k8s.io` (and its `europe-west4-docker.pkg.dev` backend) answered **403 to this VM**, intermittently,
+and even `etcd` failed to pull. It is not specific to EuroNodes: Google's registry rejects IPv6 clients it does
+not trust by default, and the VM prefers IPv6 when it has it. **The fix is to turn IPv6 off on the node**: the
+`SysctlConfig` document in the patch sets `net/ipv6/conf/all/disable_ipv6` and
+`net/ipv6/conf/default/disable_ipv6` to `"1"`, so every pull goes out over the public IPv4 address.
+No registry mirror is needed: the former `RegistryMirrorConfig` for `registry.k8s.io` (pointing at
+`europe-west4-docker.pkg.dev`) was a workaround and has been removed, so images pull from the default endpoint.
+
+- Keep the `SysctlConfig` in [`patch.yaml`](../talos/euronodes/patch.yaml): the patch is not stored in
+  `controlplane.yaml`, so a config applied without it brings IPv6 back and the 403s with it. It was once lost
+  on a branch; check it is still there after a merge.
+- Check with `talosctl read /proc/sys/net/ipv6/conf/all/disable_ipv6` (expect `1`), then
+  `talosctl image pull registry.k8s.io/pause:3.10`.
+- Nothing else depends on IPv6 here (Traefik, Tailscale and the DNS records are IPv4).
 
 Take a restic backup and an etcd snapshot before every Talos upgrade (single node, no fallback).
 Check the Talos 1.14 docs for the exact `talosctl upgrade` options that keep data on one node.
@@ -305,13 +322,11 @@ Keep in a password manager: the age private key, the restic password, the Storag
 Prometheus and Alertmanager run in the `monitoring` namespace (UI over Tailscale only), Flux errors and backup
 runs are reported to Telegram, healthchecks.io watches the backups and the monitoring itself, and a GitHub
 Actions probe checks the public URLs. Everything about it, including how to test it, is in
-[`monitoring.md`](monitoring.md). The cluster cannot pull `registry.k8s.io`, so kube-state-metrics comes from a
-mirror (see its section 7).
+[`monitoring.md`](monitoring.md). kube-state-metrics still comes from a Docker Hub mirror (see its section 7).
 
 ## Known risks
 
 - The VM UUID changing makes the volumes unreadable (restore from backup).
-- Google registries block this IP range: upgrades may fail until a mirror exists.
 - The S3 bucket is the live copy, not a backup. The Storage Box is the second copy; enable its snapshots.
 - The Talos and Kubernetes APIs are reachable only through Tailscale. If the tailnet path breaks, access needs
   the EuroNodes console (see _Reaching the cluster_).

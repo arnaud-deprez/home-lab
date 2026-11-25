@@ -73,13 +73,12 @@ encryption:
       nodeID: {}
 ---
 apiVersion: v1alpha1
-kind: RegistryMirrorConfig
-name: registry.k8s.io
-endpoints:
-  - url: https://europe-west4-docker.pkg.dev/v2/k8s-artifacts-prod/images
-    overridePath: true
----
-apiVersion: v1alpha1
 kind: UserVolumeConfig
 name: rclone
 volumeType: directory
+---
+apiVersion: v1alpha1
+kind: SysctlConfig
+params:
+  net/ipv6/conf/all/disable_ipv6: "1"
+  net/ipv6/conf/default/disable_ipv6: "1"

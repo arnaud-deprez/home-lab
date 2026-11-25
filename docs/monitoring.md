@@ -183,10 +183,11 @@ kubectl -n immich logs job/manual-1                    # for the Storage Box job
 
 ## 7. Known limits and gaps
 
-- **EuroNodes cannot pull from `registry.k8s.io`** (Google's registry answers 403 to this VPS's IP range).
-  kube-state-metrics is published only there, so the euronodes overlay pulls it from Rancher's Docker Hub
-  mirror (`rancher/mirrored-kube-state-metrics-kube-state-metrics`, v2.17.0, older than the chart's default).
-  Revisit it when upgrading the chart; other clusters use the upstream image.
+- **kube-state-metrics on EuroNodes comes from Rancher's Docker Hub mirror.** The image is published only on
+  `registry.k8s.io`, which used to answer 403 to this VPS (Google blocks IPv6 clients; the node now has IPv6
+  disabled, see `euronodes.md`). The euronodes overlay still pulls
+  `rancher/mirrored-kube-state-metrics-kube-state-metrics` v2.17.0, older than the chart's default. It could
+  go back to the upstream image now; revisit it when upgrading the chart.
 - **S3 bucket usage is not monitored.** EuroNodes' S3 API gives no free-space figure; the VM disks are watched,
   the Storage Box is, but not how full the bucket is. Immich's own statistics are the only view.
 - **No dashboards** (no Grafana), and no log collection.
