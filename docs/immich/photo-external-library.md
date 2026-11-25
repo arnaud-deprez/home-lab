@@ -3,7 +3,8 @@
 The family archive (folders per year and event) is indexed by Immich **in place** as read-only
 *external libraries*. Immich never moves, renames or edits these files, so the folder tree stays the
 backup format, unlike uploads, which the storage template (`{{y}}/{{y-MM-dd}}/{{filename}}`) re-files.
-Design: [`superpowers/specs/2026-11-15-immich-external-photo-library-design.md`](../superpowers/specs/2026-11-15-immich-external-photo-library-design.md).
+The scripts live in [`scripts/photo-library/`](../../scripts/photo-library/); the working order is: fix dates, copy to the bucket,
+create the libraries in Immich and scan, create albums, then remove duplicates.
 
 ## Where it lives
 
@@ -186,8 +187,14 @@ It never touches burst shots (same size, different pixels), other aspect ratios 
 also removes the smaller of two copies of the same picture at another size (for example the 80% versions): the larger one is
 the better quality and is kept. Always use a fresh `dedupe.py report` (groups with files already moved are skipped).
 
+**Before the copy, no Immich needed:** `scan` hashes the files on the Mac and finds exact duplicates (same image data, or
+identical bytes for videos). It splits them in two files: `plan.csv` (the copy kept is in the **same album**: safe to apply) and
+`cross-album.csv` (the kept copy is in another album, so an album would lose the photo: review it and keep only the rows you want,
+then apply it the same way). Resized copies need Immich's detection (`plan --resized` below).
+
 ```sh
 cd scripts/photo-library
+uv run archive_dupes.py scan --library Shared --library Arnaud --out ~/archive-dupes-0   # read-only; repeat --library per library
 uv run archive_dupes.py plan --report ~/dedupe-2/report.csv --out ~/archive-dupes-1   # read-only; review plan.csv
 uv run archive_dupes.py apply ~/archive-dupes-1/plan.csv --quarantine ~/Pictures/Photos-removed --yes-move <N>
 ```
